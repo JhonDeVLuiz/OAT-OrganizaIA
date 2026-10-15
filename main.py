@@ -20,7 +20,13 @@ def main(argv=None):
     ap.add_argument("--watch", action="store_true", help="observa entrada/ continuously")
     ap.add_argument("--dry-run", action="store_true", help="mostra sem mover")
     ap.add_argument("--desfazer", action="store_true", help="desfaz a ultima execucao")
+    ap.add_argument("--chat", action="store_true", help="conversa com o organizador")
     args = ap.parse_args(argv)
+
+    if args.chat:
+        from src import chat as chat_mod
+        chat_mod.iniciar()
+        return 0
 
     if args.desfazer:
         resultado = organizador.desfazer_ultima_execucao(config.LOGS_DIR)
