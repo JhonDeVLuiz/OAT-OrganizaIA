@@ -103,6 +103,8 @@ def processar(entrada=None, organizados=None, logs=None, dry_run=False,
 
     indice = duplicatas.indice_hashes(organizados, logs)
     banco = db_path or config.DB_PATH
+    if not dry_run:
+        repositorio.iniciar_banco(banco)
     movidos, ignorados = [], []
     for item in sorted(entrada.iterdir()):
         if not item.is_file():
@@ -144,6 +146,8 @@ def processar_um(caminho, entrada=None, organizados=None, logs=None,
     max_bytes = config.MAX_TAMANHO_BYTES if max_bytes is None else max_bytes
     for pasta in (organizados / "Revisar", organizados / "Duplicados", logs):
         pasta.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        repositorio.iniciar_banco(db_path or config.DB_PATH)
 
     resultado = _processar_um(caminho, entrada, organizados,
                               duplicatas.indice_hashes(organizados, logs), max_bytes,
@@ -175,29 +179,45 @@ def _logs_ativos(logs_dir):
             if not log.name.endswith(".undone.json")]
 
 
-def prever_desfazer(logs_dir=None):
+def _raizes_padrao():
+    return (config.ENTRADA_DIR, config.ORGANIZADOS_DIR)
+
+
+def _movimento_valido(mov, raizes):
+    """Origem e destino confinados; False se log adulterado (nao restaura)."""
+    try:
+        seguranca.confinar_em(mov["origem"], raizes)
+        seguranca.confinar_em(mov["destino"], raizes)
+    except (ValueError, KeyError, TypeError):
+        return False
+    return True
+
+
+def prever_desfazer(logs_dir=None, raizes=None):
     """Previa da ultima movimentacao existente (para confirmacao). None se vazio."""
     logs = Path(logs_dir or config.LOGS_DIR)
+    raizes = tuple(raizes or _raizes_padrao())
     ativos = sorted(_logs_ativos(logs), key=lambda p: p.stat().st_mtime)
     if not ativos:
         return None
     dados = json.loads(ativos[-1].read_text(encoding="utf-8"))
     for mov in reversed(dados.get("movimentos", [])):
-        if Path(mov["destino"]).is_file():
+        if Path(mov["destino"]).is_file() and _movimento_valido(mov, raizes):
             return {"id": dados.get("id"), "origem": mov["origem"], "destino": mov["destino"]}
     return None
 
 
-def desfazer_ultima_movimentacao(logs_dir=None, db_path=None):
+def desfazer_ultima_movimentacao(logs_dir=None, db_path=None, raizes=None):
     """Desfaz so a ultima movimentacao do log mais recente (uso do chat)."""
     logs = Path(logs_dir or config.LOGS_DIR)
+    raizes = tuple(raizes or _raizes_padrao())
     ativos = sorted(_logs_ativos(logs), key=lambda p: p.stat().st_mtime)
     if not ativos:
         return {"id": None, "restaurados": []}
     ultimo = ativos[-1]
     dados = json.loads(ultimo.read_text(encoding="utf-8"))
     movs = [mov for mov in dados.get("movimentos", [])
-            if Path(mov["destino"]).is_file()]
+            if Path(mov["destino"]).is_file() and _movimento_valido(mov, raizes)]
     if not movs:
         return {"id": dados.get("id"), "restaurados": []}
     mov = movs.pop()
@@ -217,9 +237,10 @@ def desfazer_ultima_movimentacao(logs_dir=None, db_path=None):
     return {"id": dados.get("id"), "restaurados": restaurados}
 
 
-def desfazer_ultima_execucao(logs_dir=None, db_path=None):
+def desfazer_ultima_execucao(logs_dir=None, db_path=None, raizes=None):
     """Desfaz a ultima execucao inteira (todas as movimentacoes do id)."""
     logs = Path(logs_dir or config.LOGS_DIR)
+    raizes = tuple(raizes or _raizes_padrao())
     ativos = sorted(_logs_ativos(logs), key=lambda p: p.stat().st_mtime)
     if not ativos:
         return {"id": None, "restaurados": []}
@@ -227,6 +248,8 @@ def desfazer_ultima_execucao(logs_dir=None, db_path=None):
     dados = json.loads(ultimo.read_text(encoding="utf-8"))
     restaurados = []
     for mov in reversed(dados.get("movimentos", [])):
+        if not _movimento_valido(mov, raizes):
+            continue  # log adulterado: nao restaura fora da raiz
         destino = Path(mov["destino"])
         if not destino.is_file():
             continue

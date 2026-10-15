@@ -49,6 +49,17 @@ def resolver_confinado(caminho, raiz):
     return resolvido
 
 
+def confinar_em(caminho, raizes):
+    """Resolve e garante que `caminho` esta dentro de uma das `raizes`."""
+    ultimo_erro = None
+    for raiz in raizes:
+        try:
+            return resolver_confinado(caminho, raiz)
+        except ValueError as exc:
+            ultimo_erro = exc
+    raise ValueError(f"caminho fora das pastas permitidas: {Path(caminho).name}") from ultimo_erro
+
+
 def nome_seguro(nome):
     """Reduz a basename e remove caracteres perigosos. Nunca retorna caminho."""
     base = str(nome).replace("\\", "/").split("/")[-1].strip()

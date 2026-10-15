@@ -141,12 +141,13 @@ class ChatSession:
         return {"ok": True, "origem": str(origem), "destino": str(destino)}
 
     def _t_desfazer(self, args):
-        previa = organizador.prever_desfazer(self.logs)
+        raizes = (self.entrada, self.organizados)
+        previa = organizador.prever_desfazer(self.logs, raizes=raizes)
         if previa is None:
             return {"ok": False, "erro": "nada a desfazer"}
         if not self.confirmar("desfazer", previa["destino"], previa["origem"]):
             return {"ok": False, "erro": "recusado pelo usuario"}
-        feito = organizador.desfazer_ultima_movimentacao(self.logs, self.banco)
+        feito = organizador.desfazer_ultima_movimentacao(self.logs, self.banco, raizes=raizes)
         if not feito["restaurados"]:
             return {"ok": False, "erro": "nada a desfazer"}
         item = feito["restaurados"][0]

@@ -21,11 +21,33 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="mostra sem mover")
     ap.add_argument("--desfazer", action="store_true", help="desfaz a ultima execucao")
     ap.add_argument("--chat", action="store_true", help="conversa com o organizador")
+    ap.add_argument("--exportar", metavar="DESTINO.zip", help="exporta backup (banco+manifest)")
+    ap.add_argument("--importar", metavar="BACKUP.zip", help="importa backup")
+    ap.add_argument("--reindexar", action="store_true", help="reindexa caminhos ao importar")
     args = ap.parse_args(argv)
 
     if args.chat:
         from src import chat as chat_mod
         chat_mod.iniciar()
+        return 0
+    if args.exportar:
+        from src import backup as backup_mod
+        resultado = backup_mod.exportar_backup(args.exportar)
+        print(f"backup: {resultado['zip']}")
+        for nome in resultado["arquivos"]:
+            print(f"  + {nome}")
+        return 0
+    if args.importar:
+        import sys as _sys
+
+        from src import backup as backup_mod
+        reindexar = args.reindexar
+        if not reindexar and _sys.stdin.isatty():
+            reindexar = input("reindexar caminhos para esta maquina? (s/n): ").strip().lower() == "s"
+        resultado = backup_mod.importar_backup(args.importar, reindexar=reindexar)
+        print(f"restaurado em: {resultado['base']}")
+        for nome in resultado["arquivos"]:
+            print(f"  + {nome}")
         return 0
 
     if args.desfazer:

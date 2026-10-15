@@ -36,7 +36,8 @@ def test_desfazer_restaura_tudo(tmp_path):
     resultado = organizador.processar(entrada, organizados, logs, db_path=banco)
     assert resultado["id"] is not None
     assert not list(entrada.iterdir())
-    desfeito = organizador.desfazer_ultima_execucao(logs, db_path=banco)
+    desfeito = organizador.desfazer_ultima_execucao(logs, db_path=banco,
+                                                    raizes=(entrada, organizados))
     assert desfeito["id"] == resultado["id"]
     assert len(desfeito["restaurados"]) == 2
     assert (entrada / "a.txt").read_text(encoding="utf-8") == "um"
@@ -72,6 +73,32 @@ def test_arquivo_grande_e_excluido_ficam(tmp_path):
     motivos = {ign["motivo"] for ign in resultado["ignorados"]}
     assert motivos == {"grande", "excluido"}
     assert (entrada / "grande.txt").is_file() and (entrada / ".env").is_file()
+
+
+def test_log_adulterado_nao_restaura_fora(tmp_path):
+    import json as _json
+
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (organizados / "Textos").mkdir(parents=True)
+    vitima = organizados / "Textos" / "v.txt"
+    vitima.write_text("falso", encoding="utf-8")
+    fora = tmp_path / ".." / "evil_fora.txt"
+    (logs).mkdir(exist_ok=True)
+    (logs / "exec_evil.json").write_text(_json.dumps({
+        "id": "evil", "data": "2026-01-01",
+        "movimentos": [
+            {"status": "movido", "origem": str(fora), "destino": str(vitima),
+             "hash": "h1", "categoria": "Textos"},
+            {"status": "movido", "origem": str(entrada / "b.txt"),
+             "destino": str(tmp_path / "outro_fora.txt"),
+             "hash": "h2", "categoria": "Textos"},
+        ],
+    }), encoding="utf-8")
+    raizes = (entrada, organizados)
+    assert organizador.prever_desfazer(logs, raizes=raizes) is None
+    assert organizador.desfazer_ultima_execucao(logs, banco, raizes)["restaurados"] == []
+    assert organizador.desfazer_ultima_movimentacao(logs, banco, raizes)["restaurados"] == []
+    assert vitima.is_file() and not fora.exists()  # nada saiu do lugar
 
 
 def test_log_tem_id_e_sem_conteudo(tmp_path):

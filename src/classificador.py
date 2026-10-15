@@ -8,7 +8,7 @@ from . import regras, repositorio, seguranca
 from .config import CATEGORIAS, TRECHO_MAX_CHARS
 
 LIMIAR_CONFIANCA = 0.7
-MODELO_PADRAO = "gemini-2.0-flash"
+MODELO_PADRAO = "gemini-3.5-flash"  # override via GEMINI_MODEL
 
 
 def carregar_chave():
@@ -93,7 +93,11 @@ def classificar_ia(nome, trecho, categorias=None, chamar_ia=None):
 
 def categoria_registrada(banco, resumo):
     """Categoria ja classificada para o hash (para nao classificar duas vezes)."""
-    historico = repositorio.historico_do_arquivo(banco, resumo)
+    historico = None
+    try:
+        historico = repositorio.historico_do_arquivo(banco, resumo)
+    except Exception:
+        return None
     if not historico or not historico["classificacoes"]:
         return None
     return historico["classificacoes"][-1]["categoria"]
