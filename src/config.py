@@ -13,8 +13,14 @@ DB_PATH = DADOS_DIR / "organizaia.db"
 
 MAX_TAMANHO_BYTES = 20 * 1024 * 1024
 TRECHO_MAX_CHARS = 2000
+MIN_CHARS_IA = 20
 
 CATEGORIAS = ["Documentos", "Planilhas", "PDFs", "Textos"]
+
+CATEGORIAS_CONTEUDO = ["Faturas", "Estudos", "Trabalho", "Pessoal", "Outros"]
+
+MAX_CHAMADAS_IA = 60
+INTERVALO_IA_SEG = 1.0
 
 EXTENSAO_PARA_CATEGORIA = {
     ".pdf": "PDFs",

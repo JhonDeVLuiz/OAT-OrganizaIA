@@ -1,6 +1,7 @@
 """Fase 2: entrada/ -> organizados/. Dry-run, log com id, sufixo, desfazer."""
 import json
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -33,7 +34,7 @@ def _ignorado(origem, motivo):
 
 
 def _processar_um(caminho, entrada, organizados, indice, max_bytes,
-                  db_path=None, usar_ia=True):
+                  db_path=None, usar_ia=True, cache_ia=None, modo="tipo", orcamento=None):
     origem = Path(caminho)
     if origem.suffix.lower() in SUFFIXOS_TEMPORARIOS:
         return _ignorado(origem, "temporario")
@@ -58,22 +59,22 @@ def _processar_um(caminho, entrada, organizados, indice, max_bytes,
         return _ignorado(origem, "ausente")
 
     resumo = duplicatas.sha256_arquivo(origem)
-    confianca, origem_decisao = 1.0, "regras"
+    confianca, origem_decisao, nota = 1.0, "regras", None
     if resumo in indice:
         destino = _padrao(Path(organizados) / "Duplicados", nome)
         status, categoria = "duplicado", regras.decidir(nome)
         origem_decisao = "duplicata"
-    else:
+    elif modo == "ia" and usar_ia and db_path is not None:
+        categoria, confianca, origem_decisao, nota = _decidir_modo_ia(
+            origem, nome, resumo, db_path, cache_ia, orcamento)
+        pasta = (Path(organizados) / "Revisar") if categoria is None else (Path(organizados) / categoria)
+        destino = _padrao(pasta, nome)
+        status = "revisar" if categoria is None else "movido"
+        if status == "revisar":
+            origem_decisao = "revisao"
+            confianca = None
+    else:  # modo tipo: so regras por extensao, nenhuma chamada a IA
         categoria = regras.decidir(nome)
-        if categoria is None and usar_ia and db_path is not None:
-            categoria = classificador.categoria_registrada(db_path, resumo)
-            if categoria is not None:
-                origem_decisao = "ia-registrada"
-            else:
-                ia = classificador.classificar_ia(nome, leitor.extrair_trecho(origem))
-                if ia is not None:
-                    categoria, confianca = ia
-                    origem_decisao = "ia"
         pasta = (Path(organizados) / "Revisar") if categoria is None else (Path(organizados) / categoria)
         destino = _padrao(pasta, nome)
         status = "revisar" if categoria is None else "movido"
@@ -89,11 +90,61 @@ def _processar_um(caminho, entrada, organizados, indice, max_bytes,
         "categoria": categoria,
         "confianca": confianca,
         "origem_decisao": origem_decisao,
+        "nota": nota,
     }
 
 
+def _novo_orcamento():
+    return {"usadas": 0, "avisado": False, "avisos": []}
+
+
+def _avisar(orcamento, texto):
+    if orcamento is not None and not orcamento["avisado"]:
+        orcamento["avisado"] = True
+        orcamento["avisos"].append(texto)
+
+
+def _fallback_regras(nome, motivo, orcamento):
+    """IA indisponivel: regras por extensao; Revisar so se regras nao decidirem."""
+    _avisar(orcamento, f"IA indisponível ({motivo}), usando regras por extensão")
+    categoria = regras.decidir(nome)
+    if categoria is None:
+        return (None, None, "revisao", "IA indisponível")
+    return (categoria, 1.0, "regras", None)
+
+
+def _decidir_modo_ia(origem, nome, resumo, db_path, cache_ia, orcamento):
+    """Modo ia: conteudo primeiro; sem IA, regras; Revisar so se ambos falharem."""
+    if cache_ia is not None and resumo in cache_ia:
+        return cache_ia[resumo]
+    registrada = classificador.categoria_registrada(db_path, resumo)
+    if registrada is not None:
+        resultado = (registrada, None, "ia-registrada", None)
+    else:
+        if orcamento is not None and orcamento["usadas"] >= config.MAX_CHAMADAS_IA:
+            resultado = _fallback_regras(nome, "limite de chamadas", orcamento)
+        else:
+            if (orcamento is not None and orcamento["usadas"] > 0
+                    and config.INTERVALO_IA_SEG > 0):
+                time.sleep(config.INTERVALO_IA_SEG)
+            if orcamento is not None:
+                orcamento["usadas"] += 1
+            trecho = leitor.extrair_trecho(origem) or ""
+            detalhe = {}
+            ia = classificador.classificar_conteudo(nome, trecho, detalhe=detalhe)
+            if ia is not None:
+                resultado = (ia[0], ia[1], "ia", None)
+            elif detalhe.get("motivo") in ("sem-chave", "falha"):
+                resultado = _fallback_regras(nome, detalhe["motivo"], orcamento)
+            else:
+                resultado = (None, None, "revisao", "baixa-confiança")
+    if cache_ia is not None:
+        cache_ia[resumo] = resultado
+    return resultado
+
+
 def processar(entrada=None, organizados=None, logs=None, dry_run=False,
-              max_bytes=None, db_path=None):
+              max_bytes=None, db_path=None, modo="tipo"):
     entrada = Path(entrada or config.ENTRADA_DIR)
     organizados = Path(organizados or config.ORGANIZADOS_DIR)
     logs = Path(logs or config.LOGS_DIR)
@@ -105,12 +156,14 @@ def processar(entrada=None, organizados=None, logs=None, dry_run=False,
     banco = db_path or config.DB_PATH
     if not dry_run:
         repositorio.iniciar_banco(banco)
+    cache_ia, orcamento = {}, _novo_orcamento()
     movidos, ignorados = [], []
     for item in sorted(entrada.iterdir()):
         if not item.is_file():
             continue
         resultado = _processar_um(item, entrada, organizados, indice, max_bytes,
-                                  db_path=banco, usar_ia=not dry_run)
+                                  db_path=banco, usar_ia=True, cache_ia=cache_ia,
+                                  modo=modo, orcamento=orcamento)
         if resultado["status"] == "ignorado":
             ignorados.append(resultado)
             continue
@@ -134,11 +187,12 @@ def processar(entrada=None, organizados=None, logs=None, dry_run=False,
         )
         repositorio.iniciar_banco(db_path)
         repositorio.salvar_movimentos(db_path, movidos)
-    return {"id": exec_id, "movimentos": movidos, "ignorados": ignorados, "dry_run": dry_run}
+    return {"id": exec_id, "movimentos": movidos, "ignorados": ignorados,
+            "dry_run": dry_run, "avisos": orcamento["avisos"], "modo": modo}
 
 
 def processar_um(caminho, entrada=None, organizados=None, logs=None,
-                 dry_run=False, max_bytes=None, db_path=None):
+                 dry_run=False, max_bytes=None, db_path=None, modo="tipo"):
     """Uma so arquivo (usado pelo monitor). Gera log proprio se mover."""
     entrada = Path(entrada or config.ENTRADA_DIR)
     organizados = Path(organizados or config.ORGANIZADOS_DIR)
@@ -149,12 +203,17 @@ def processar_um(caminho, entrada=None, organizados=None, logs=None,
     if not dry_run:
         repositorio.iniciar_banco(db_path or config.DB_PATH)
 
+    orcamento = _novo_orcamento()
     resultado = _processar_um(caminho, entrada, organizados,
                               duplicatas.indice_hashes(organizados, logs), max_bytes,
-                              db_path=(db_path or config.DB_PATH), usar_ia=not dry_run)
+                              db_path=(db_path or config.DB_PATH), usar_ia=True,
+                              cache_ia={}, modo=modo, orcamento=orcamento)
+    for aviso in orcamento["avisos"]:
+        print(f"[aviso] {aviso}")
     if resultado["status"] == "ignorado" or dry_run:
         return {"id": None, "movimentos": [resultado],
-                "ignorados": [], "dry_run": dry_run}
+                "ignorados": [], "dry_run": dry_run, "avisos": orcamento["avisos"],
+                "modo": modo}
     Path(resultado["destino"]).parent.mkdir(parents=True, exist_ok=True)
     shutil.move(resultado["origem"], resultado["destino"])
     exec_id = _id_execucao()
@@ -168,7 +227,8 @@ def processar_um(caminho, entrada=None, organizados=None, logs=None,
     repositorio.iniciar_banco(db_path)
     repositorio.salvar_movimentos(db_path, [resultado])
     return {"id": exec_id, "movimentos": [resultado],
-            "ignorados": [], "dry_run": dry_run}
+            "ignorados": [], "dry_run": dry_run, "avisos": orcamento["avisos"],
+            "modo": modo}
 
 
 def _logs_ativos(logs_dir):

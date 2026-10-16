@@ -20,6 +20,117 @@ def _fake(resposta, caixa=None):
     return _chamar
 
 
+def test_retry_transitorio_recupera():
+    from src import classificador as clf
+
+    chamadas = []
+
+    def instavel():
+        chamadas.append(1)
+        if len(chamadas) < 3:
+            raise RuntimeError("503 UNAVAILABLE")
+        return "ok"
+
+    assert clf.chamar_com_retry(instavel, esperar=lambda s: None) == "ok"
+    assert len(chamadas) == 3
+
+
+def test_retry_nao_repete_erro_final():
+    from src import classificador as clf
+
+    chamadas = []
+
+    def final():
+        chamadas.append(1)
+        raise RuntimeError("quota excedida")
+
+    with pytest.raises(RuntimeError):
+        clf.chamar_com_retry(final, esperar=lambda s: None)
+    assert len(chamadas) == 1
+
+
+def test_retry_esgota_e_levanta():
+    from src import classificador as clf
+
+    chamadas = []
+
+    def sempre_503():
+        chamadas.append(1)
+        raise RuntimeError("503 UNAVAILABLE")
+
+    with pytest.raises(RuntimeError):
+        clf.chamar_com_retry(sempre_503, esperar=lambda s: None)
+    assert len(chamadas) == 3
+
+
+def test_rotatividade_modelo_falha_proximo(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from src import classificador as clf
+
+    tentados = []
+
+    def _fake_gc(model=None, contents=None):
+        tentados.append(model)
+        if model == "ruim":
+            raise RuntimeError("404 NOT_FOUND")
+        return types.SimpleNamespace(text="ok")
+
+    fake = types.SimpleNamespace(
+        Client=lambda api_key=None: types.SimpleNamespace(
+            models=types.SimpleNamespace(generate_content=_fake_gc)))
+    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(genai=fake))
+    monkeypatch.setattr(clf, "modelos", lambda: ["ruim", "bom"])
+    assert clf._chamar_gemini("oi", "k", esperar=lambda s: None) == "ok"
+    assert tentados == ["ruim", "bom"]
+
+
+def test_rotatividade_erro_final_nao_troca(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from src import classificador as clf
+
+    tentados = []
+
+    def _fake_gc(model=None, contents=None):
+        tentados.append(model)
+        raise RuntimeError("401 sem autorizacao")
+
+    fake = types.SimpleNamespace(
+        Client=lambda api_key=None: types.SimpleNamespace(
+            models=types.SimpleNamespace(generate_content=_fake_gc)))
+    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(genai=fake))
+    monkeypatch.setattr(clf, "modelos", lambda: ["a", "b"])
+    with pytest.raises(RuntimeError):
+        clf._chamar_gemini("oi", "k", esperar=lambda s: None)
+    assert tentados == ["a"]
+
+
+def test_conteudo_longo_corte_07():
+    from src import classificador as clf
+
+    longo = "x" * 30
+    ok = lambda p: '{"categoria": "Faturas", "confianca": 0.7}'
+    baixo = lambda p: '{"categoria": "Faturas", "confianca": 0.69}'
+    assert clf.classificar_conteudo("a.xyz", longo, chamar_ia=ok) == ("Faturas", 0.7)
+    assert clf.classificar_conteudo("a.xyz", longo, chamar_ia=baixo) is None
+    fora = lambda p: '{"categoria": "Astronomia", "confianca": 0.99}'
+    assert clf.classificar_conteudo("a.xyz", longo, chamar_ia=fora) is None
+
+
+def test_conteudo_curto_so_nome_corte_085():
+    from src import classificador as clf
+
+    caixa = []
+    alto = lambda p: caixa.append(p) or '{"categoria": "Faturas", "confianca": 0.9}'
+    assert clf.classificar_conteudo("fatura.xyz", "curto", chamar_ia=alto) == ("Faturas", 0.9)
+    assert "SOMENTE pelo nome" in caixa[0]
+    medio = lambda p: '{"categoria": "Faturas", "confianca": 0.8}'
+    assert clf.classificar_conteudo("fatura.xyz", "curto", chamar_ia=medio) is None
+
+
 def test_json_quebrado_vira_revisar():
     assert classificador.classificar_ia("x.xyz", "trecho",
                                          chamar_ia=_fake("nao e json {")) is None
@@ -101,7 +212,7 @@ def test_nao_classifica_duas_vezes(tmp_path, monkeypatch):
     chamadas = []
     monkeypatch.setattr(classificador, "classificar_ia",
                         lambda *a, **k: chamadas.append(a) or ("Planilhas", 0.99))
-    resultado = organizador.processar(entrada, organizados, logs, db_path=banco)
+    resultado = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
     mov = resultado["movimentos"][0]
     assert mov["categoria"] == "Textos" and chamadas == []  # reusou o registro
     assert (organizados / "Textos" / "misterio.xyz").is_file()
