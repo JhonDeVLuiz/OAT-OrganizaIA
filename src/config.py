@@ -19,8 +19,8 @@ CATEGORIAS = ["Documentos", "Planilhas", "PDFs", "Textos"]
 
 CATEGORIAS_CONTEUDO = ["Faturas", "Estudos", "Trabalho", "Pessoal", "Outros"]
 
-MAX_CHAMADAS_IA = 60
-INTERVALO_IA_SEG = 1.0
+MAX_CHAMADAS_IA = 15
+INTERVALO_IA_SEG = 7.0
 
 EXTENSAO_PARA_CATEGORIA = {
     ".pdf": "PDFs",
