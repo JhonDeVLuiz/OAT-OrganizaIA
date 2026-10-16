@@ -30,11 +30,12 @@ def arquivo_estavel(caminho, intervalo=0.5, tentativas=30):
 
 
 class _Handler(FileSystemEventHandler):
-    def __init__(self, entrada, organizados, logs, dry_run):
+    def __init__(self, entrada, organizados, logs, dry_run, modo="tipo"):
         self.entrada = entrada
         self.organizados = organizados
         self.logs = logs
         self.dry_run = dry_run
+        self.modo = modo
 
     def _cuidar(self, caminho):
         if deve_ignorar(caminho):
@@ -43,7 +44,7 @@ class _Handler(FileSystemEventHandler):
             return
         organizador.processar_um(caminho, entrada=self.entrada,
                                  organizados=self.organizados, logs=self.logs,
-                                 dry_run=self.dry_run)
+                                 dry_run=self.dry_run, modo=self.modo)
 
     def on_created(self, event):
         if not event.is_directory:
@@ -54,12 +55,12 @@ class _Handler(FileSystemEventHandler):
             self._cuidar(event.dest_path)
 
 
-def iniciar(entrada=None, organizados=None, logs=None, dry_run=False):
+def iniciar(entrada=None, organizados=None, logs=None, dry_run=False, modo="tipo"):
     entrada = Path(entrada or config.ENTRADA_DIR)
     observador = Observer()
     observador.schedule(_Handler(entrada,
                                  Path(organizados or config.ORGANIZADOS_DIR),
-                                 Path(logs or config.LOGS_DIR), dry_run),
+                                 Path(logs or config.LOGS_DIR), dry_run, modo),
                         str(entrada), recursive=False)
     observador.start()
     try:

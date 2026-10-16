@@ -4,3 +4,12 @@ dados/
 logs/
 __pycache__/
 *.db
+entrada/*
+!entrada/.gitkeep
+organizados/*
+!organizados/Revisar/
+!organizados/Duplicados/
+organizados/Revisar/*
+organizados/Duplicados/*
+!organizados/Revisar/.gitkeep
+!organizados/Duplicados/.gitkeep

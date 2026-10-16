@@ -109,3 +109,183 @@ def test_log_tem_id_e_sem_conteudo(tmp_path):
     assert dados["id"] == resultado["id"]
     bruto = json.dumps(dados)
     assert "conteudo sensivel" not in bruto  # log so com metadados
+
+
+def _mock_ia(monkeypatch, categoria="Faturas", confianca=0.9):
+    from src import classificador as _clf
+
+    chamadas = []
+
+    def _fake(nome, trecho, categorias=None, chamar_ia=None, detalhe=None):
+        chamadas.append((nome, trecho))
+        if detalhe is not None:
+            detalhe["motivo"] = "ok"
+        return (categoria, confianca)
+
+    monkeypatch.setattr(_clf, "classificar_conteudo", _fake)
+    return chamadas
+
+
+def _sem_intervalo(monkeypatch):
+    from src import config as _config
+
+    monkeypatch.setattr(_config, "INTERVALO_IA_SEG", 0)
+
+
+CONTEUDO_LONGO = "conteudo longo de teste para a IA ler com calma e decidir"
+
+
+def _mock_leitor_legivel(monkeypatch, texto=CONTEUDO_LONGO):
+    from src import leitor as _leitor
+
+    monkeypatch.setattr(_leitor, "extrair_trecho", lambda *a, **k: texto)
+
+
+def test_modo_tipo_sem_ia(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "m.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    chamadas = _mock_ia(monkeypatch)
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="tipo")
+    mov = real["movimentos"][0]
+    assert mov["status"] == "revisar" and mov["nota"] is None and chamadas == []
+    assert (organizados / "Revisar" / "m.xyz").is_file()
+
+
+def test_modo_ia_conteudo(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "m.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    _mock_ia(monkeypatch, "Faturas", 0.9)
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    mov = real["movimentos"][0]
+    assert mov["categoria"] == "Faturas" and mov["origem_decisao"] == "ia"
+    assert (organizados / "Faturas" / "m.xyz").is_file()
+
+
+def test_dry_run_igual_real(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "m.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    _mock_ia(monkeypatch)
+    seco = organizador.processar(entrada, organizados, logs, dry_run=True,
+                                 db_path=banco, modo="ia")
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    assert [m["destino"] for m in seco["movimentos"]] == [m["destino"] for m in real["movimentos"]]
+    assert seco["movimentos"][0]["destino"].endswith(str(Path("Faturas") / "m.xyz"))
+    assert (organizados / "Faturas" / "m.xyz").is_file()
+
+
+def test_ia_indisponivel_preview(tmp_path, monkeypatch):
+    from src import classificador as _clf
+
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "m.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    monkeypatch.setattr(_clf, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    _mock_leitor_legivel(monkeypatch)
+    seco = organizador.processar(entrada, organizados, logs, dry_run=True,
+                                 db_path=banco, modo="ia")
+    mov = seco["movimentos"][0]
+    assert mov["status"] == "revisar" and mov["nota"] == "IA indisponível"
+    assert (entrada / "m.xyz").is_file() and list(logs.glob("exec_*.json")) == []
+
+
+def test_texto_curto_revisar_sem_ia(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "m.xyz").write_text("curto", encoding="utf-8")
+    chamadas = _mock_ia(monkeypatch)
+    real = organizador.processar(entrada, organizados, logs, db_path=banco)
+    mov = real["movimentos"][0]
+    assert mov["status"] == "revisar" and mov["nota"] is None
+    assert chamadas == [] and (organizados / "Revisar" / "m.xyz").is_file()
+
+
+def _mock_ia_backend(monkeypatch, resposta):
+    """IA real com backend falso: passa pela validacao e pelos limiares de verdade."""
+    from src import classificador as _clf
+
+    real = _clf.classificar_conteudo
+    monkeypatch.setattr(
+        _clf, "classificar_conteudo",
+        lambda nome, trecho, **k: real(nome, trecho, chamar_ia=lambda p: resposta))
+
+
+def test_modo_ia_texto_curto_nome_alta(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "fatura-luz.xyz").write_text("curto", encoding="utf-8")
+    _mock_ia_backend(monkeypatch, '{"categoria": "Faturas", "confianca": 0.9}')
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    assert real["movimentos"][0]["categoria"] == "Faturas"
+    assert (organizados / "Faturas" / "fatura-luz.xyz").is_file()
+
+
+def test_modo_ia_texto_curto_nome_baixa(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "fatura-luz.xyz").write_text("curto", encoding="utf-8")
+    _mock_ia_backend(monkeypatch, '{"categoria": "Faturas", "confianca": 0.8}')
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    mov = real["movimentos"][0]
+    assert mov["status"] == "revisar" and mov["nota"] == "baixa-confiança"
+
+
+def test_modo_ia_indisponivel_fallback_regras(tmp_path, monkeypatch):
+    from src import classificador as _clf
+
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "n.txt").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    (entrada / "m.xyz").write_text(CONTEUDO_LONGO + " diferente", encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    monkeypatch.setattr(_clf, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    por_destino = {Path(m["destino"]).name: m for m in real["movimentos"]}
+    assert por_destino["n.txt"]["categoria"] == "Textos"
+    assert por_destino["m.xyz"]["status"] == "revisar"
+    assert real["avisos"] == ["IA indisponível (sem-chave), usando regras por extensão"]
+    assert (organizados / "Textos" / "n.txt").is_file()
+
+
+def test_max_chamadas_limita_ia(tmp_path, monkeypatch):
+    from src import config as _config
+
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "a.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    (entrada / "b.xyz").write_text(CONTEUDO_LONGO + "2", encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    chamadas = _mock_ia(monkeypatch)
+    monkeypatch.setattr(_config, "MAX_CHAMADAS_IA", 1)
+    monkeypatch.setattr(_config, "INTERVALO_IA_SEG", 0)
+    real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    assert len(chamadas) == 1
+    assert real["avisos"] == ["IA indisponível (limite de chamadas), usando regras por extensão"]
+
+
+def test_intervalo_entre_chamadas(tmp_path, monkeypatch):
+    import time as _time
+
+    from src import config as _config
+
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "a.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    (entrada / "b.xyz").write_text(CONTEUDO_LONGO + "2", encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    _mock_ia(monkeypatch)
+    monkeypatch.setattr(_config, "INTERVALO_IA_SEG", 5)
+    dormidas = []
+    monkeypatch.setattr(_time, "sleep", lambda s: dormidas.append(s))
+    organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
+    assert dormidas == [5]
+
+
+def test_cache_hash_uma_chamada(tmp_path, monkeypatch):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "m.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    chamadas = _mock_ia(monkeypatch)
+    cache = {}
+    kwargs = dict(entrada=entrada, organizados=organizados, max_bytes=10 ** 9,
+                  db_path=banco, usar_ia=True, cache_ia=cache, modo="ia")
+    r1 = organizador._processar_um(entrada / "m.xyz", indice=set(), **kwargs)
+    r2 = organizador._processar_um(entrada / "m.xyz", indice=set(), **kwargs)
+    assert len(chamadas) == 1 and r1["destino"] == r2["destino"]

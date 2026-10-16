@@ -7,7 +7,8 @@ from src import config, monitor, organizador
 def _resumo(resultado):
     for mov in resultado["movimentos"]:
         prefixo = "[dry-run]" if resultado["dry_run"] else f"[{mov['status']}]"
-        print(f"{prefixo} {mov['origem']} -> {mov['destino']}")
+        nota = f" ({mov['nota']})" if mov.get("nota") else ""
+        print(f"{prefixo} {mov['origem']} -> {mov['destino']}{nota}")
     for ign in resultado["ignorados"]:
         print(f"[ignorado:{ign['motivo']}] {ign['origem']}")
     if resultado["id"]:
@@ -20,6 +21,8 @@ def main(argv=None):
     ap.add_argument("--watch", action="store_true", help="observa entrada/ continuously")
     ap.add_argument("--dry-run", action="store_true", help="mostra sem mover")
     ap.add_argument("--desfazer", action="store_true", help="desfaz a ultima execucao")
+    ap.add_argument("--modo", choices=["tipo", "ia"], default="tipo",
+                    help="tipo: so regras; ia: conteudo via Gemini (padrao: tipo)")
     ap.add_argument("--chat", action="store_true", help="conversa com o organizador")
     ap.add_argument("--exportar", metavar="DESTINO.zip", help="exporta backup (banco+manifest)")
     ap.add_argument("--importar", metavar="BACKUP.zip", help="importa backup")
@@ -59,9 +62,11 @@ def main(argv=None):
         return 0
     if args.watch:
         print(f"observando {config.ENTRADA_DIR} (Ctrl+C para sair)")
-        monitor.iniciar(dry_run=args.dry_run)
+        monitor.iniciar(dry_run=args.dry_run, modo=args.modo)
         return 0
-    resultado = organizador.processar(dry_run=args.dry_run)
+    resultado = organizador.processar(dry_run=args.dry_run, modo=args.modo)
+    for aviso in resultado.get("avisos", []):
+        print(f"[aviso] {aviso}")
     _resumo(resultado)
     return 0
 
