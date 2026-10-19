@@ -233,3 +233,160 @@ def test_desfazer_tool_restaura(tmp_path):
     ])
     assert sessao.responder("desfaca") == "desfeito"
     assert (entrada / "a.txt").is_file()
+
+
+def _roteador(monkeypatch, modelos_fake):
+    """Patches de rotação do chat rápido; retorna lista de esperas registradas."""
+    from src import classificador as clf
+
+    esperas = []
+    monkeypatch.setattr(clf, "modelos",
+                        lambda: list(modelos_fake))
+    monkeypatch.setattr(clf, "CHAT_ESPERA_MODELOS", 1)
+    monkeypatch.setattr(clf, "CHAT_TIMEOUT_SEG", 0.05)
+    monkeypatch.setattr(clf, "time", type("T", (), {
+        "sleep": lambda s: esperas.append(s)}))
+    return esperas
+
+
+def test_chat_roteador_pula_modelo_falho_e_tempo(monkeypatch):
+    import time as _time
+
+    from src import classificador as clf
+
+    esperas = _roteador(monkeypatch, ["m1", "m2"])
+    dormidas_m1 = []
+    monkeypatch.setattr(_time, "sleep", lambda s: dormidas_m1.append(s))
+
+    def _pedir(nome):
+        if nome == "m1":
+            raise RuntimeError("503 UNAVAILABLE")
+        return f"ok de {nome}"
+
+    assert clf.chamar_chat_roteando(_pedir, esperar=_time.sleep) == "ok de m2"
+    assert dormidas_m1 == [1]  # 1s so entre modelos, sem backoff
+
+
+def test_chat_roteador_timeout_pula_para_proximo(monkeypatch):
+    import time as _time
+
+    from src import classificador as clf
+
+    _roteador(monkeypatch, ["lento", "rapido"])
+
+    def _pedir(nome):
+        if nome == "lento":
+            _time.sleep(5)  # trava; timeout deve pular sem esperar
+        return "ok rapido"
+
+    comecou = _time.perf_counter()
+    saida = clf.chamar_chat_roteando(_pedir)
+    gasto = _time.perf_counter() - comecou
+    assert saida == "ok rapido"
+    assert gasto < 3  # nao esperou os 5s do modelo lento
+
+
+def test_chat_todos_modelos_falham_vira_api_ocupada(monkeypatch, tmp_path):
+    from src import classificador as clf
+
+    _roteador(monkeypatch, ["m1", "m2", "m3"])
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = None
+
+    import types
+
+    def _falha(**kwargs):
+        raise RuntimeError("503 UNAVAILABLE")
+
+    fake_genai = types.SimpleNamespace(
+        Client=lambda api_key=None: types.SimpleNamespace(
+            models=types.SimpleNamespace(generate_content=_falha)))
+    import sys
+    monkeypatch.setitem(sys.modules, "google",
+                        types.SimpleNamespace(genai=fake_genai))
+    monkeypatch.setenv("GEMINI_API_KEY", "falsa")
+
+    import time as _time
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    assert sessao.responder("oi") == "API ocupada, tente de novo em instantes."
+
+
+def test_criar_pasta_confirma_somente_em_organizados(tmp_path):
+    organizados = tmp_path / "o"
+    organizados.mkdir()
+    sessao, _ = _sessao(tmp_path)
+    ok = sessao._executar("criar_pasta", {"caminho": str(organizados / "Pessoal" / "2026")})
+    assert ok["ok"] is True and (organizados / "Pessoal" / "2026").is_dir()
+    fora = sessao._executar(
+        "criar_pasta", {"caminho": str(tmp_path / "fora" / "x")})
+    assert fora["ok"] is False and "fora" in fora["erro"]
+    recusada = _sessao(tmp_path, confirmar=lambda *a: False)[0]
+    negada = recusada._executar(
+        "criar_pasta", {"caminho": str(organizados / "Nao")})
+    assert negada["ok"] is False and not (organizados / "Nao").exists()
+
+
+def test_reescrever_com_backup_e_recusa(tmp_path):
+    organizados = tmp_path / "o"
+    pasta = organizados / "Textos"
+    pasta.mkdir(parents=True)
+    alvo = pasta / "a.txt"
+    alvo.write_text("conteudo velho", encoding="utf-8")
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    ok = sessao._executar("reescrever_arquivo", {
+        "caminho": str(alvo), "texto": "conteudo novo pela ia"})
+    assert ok["ok"] is True
+    assert alvo.read_text(encoding="utf-8") == "conteudo novo pela ia"
+    assert (pasta / "a (original).txt").read_text(encoding="utf-8") == "conteudo velho"
+    # 2a reescrita: backup original nunca e regravado
+    sessao._executar("reescrever_arquivo", {
+        "caminho": str(alvo), "texto": "terceira versao"})
+    assert (pasta / "a (original).txt").read_text(encoding="utf-8") == "conteudo velho"
+
+    recusa = _sessao(tmp_path, confirmar=lambda *a: False)[0]
+    bloqueado = recusa._executar("reescrever_arquivo", {
+        "caminho": str(alvo), "texto": "nao vai"})
+    assert bloqueado["ok"] is False
+    assert alvo.read_text(encoding="utf-8") == "terceira versao"  # intacto
+
+    exclusao = _sessao(tmp_path, confirmar=lambda *a: True)[0]
+    segredo = exclusao._executar("reescrever_arquivo", {
+        "caminho": str(pasta / ".env"), "texto": "K=x"})
+    assert segredo["ok"] is False and "exclusão" in segredo["erro"]
+
+    entrada_fora = _sessao(tmp_path, confirmar=lambda *a: True)[0]
+    (tmp_path / "e").mkdir()
+    (tmp_path / "e" / "a.txt").write_text("falso", encoding="utf-8")
+    fora = entrada_fora._executar("reescrever_arquivo", {
+        "caminho": str(tmp_path / "e" / "a.txt"), "texto": "x"})
+    assert fora["ok"] is False and "fora" in fora["erro"]
+    assert (tmp_path / "e" / "a.txt").is_file()
+
+
+def test_mover_em_lote_parcial_e_recusa(tmp_path):
+    entrada, organizados = tmp_path / "e", tmp_path / "o"
+    entrada.mkdir()
+    organizados.mkdir()
+    (entrada / "a.txt").write_text("falso", encoding="utf-8")
+    (entrada / "b.txt").write_text("falso", encoding="utf-8")
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: False)
+    recusado = sessao._executar("mover_em_lote", {"movimentos": [
+        {"origem": str(entrada / "a.txt"), "destino": str(organizados / "Textos")},
+    ]})
+    assert recusado == {"ok": False, "erro": "recusado pelo usuario", "erros": []}
+    assert (entrada / "a.txt").is_file()
+
+    vistos = []
+    sessao.confirmar = lambda acao, o, d: vistos.append((acao, o)) or True
+    parcial = sessao._executar("mover_em_lote", {"movimentos": [
+        {"origem": str(entrada / "a.txt"), "destino": str(organizados / "Textos")},
+        {"origem": str(entrada / "fantasma.txt"), "destino": str(organizados)},
+        {"origem": str("../../fora.txt"), "destino": str(organizados)},
+    ]})
+    assert parcial["ok"] is True and len(parcial["movidos"]) == 1
+    assert len(parcial["erros"]) == 2
+    assert (organizados / "Textos" / "a.txt").is_file()
+    assert (entrada / "b.txt").is_file()  # nao foi pedido ao lote, fica
+    for acao, _ in vistos:
+        assert acao == "mover_em_lote"

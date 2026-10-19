@@ -15,6 +15,10 @@
 ## Regras de segurança
 - Chave da API só em `.env` (`GEMINI_API_KEY`); nunca ler o valor, nunca imprimir/logar, nunca colar em docs, commits ou SPEC.
 - Mover, renomear ou apagar arquivos do usuário só dentro de `entrada/` e `organizados/`. O programa só grava seus próprios dados em `logs/` (logs JSON) e `dados/` (banco SQLite). Nunca tocar em `.venv/`, `OrganizaIA/`, `.opencode/` nem fora da raiz do projeto.
+- Sobrescrever conteúdo (reescrever) só em `organizados/`, com confirmação explícita,
+  backup automático `nome (original).ext` (o 1º original nunca é regravado) e
+  auditoria. `entrada/` é só de leitura; `.env`/exclusões nunca podem ser escritas.
+  `criar_pasta` só dentro de `organizados/` (com confirmação e auditoria).
 - Validar todo caminho com `Path.resolve()` e confinar à raiz permitida; rejeitar `..`, links e caminhos absolutos estranhos.
 - SQL sempre parametrizado (`?` placeholders); nunca concatenar strings em query.
 - Mover/apagar só com confirmação explícita e suporte a `--dry-run` (mostrar origem → destino antes de agir).

@@ -233,10 +233,25 @@ class Painel(tk.Tk):
             return
         self.campo_chat.delete(0, "end")
         self._falar("voce", pergunta)
+        self._falar("ia", "pensando...")
+        self.campo_chat.config(state="disabled")
+        fila = queue.Queue()
+        threading.Thread(target=lambda: fila.put(self._responder_seguro(pergunta)),
+                         daemon=True).start()
+        self.after(300, self._esperar_chat, fila)
+
+    def _responder_seguro(self, pergunta):
         try:
-            self._falar("ia", self.sessao.responder(pergunta))
+            return self.sessao.responder(pergunta)
         except Exception as exc:  # noqa: BLE001 - painel de teste
-            self._falar("ia", f"erro: {exc}")
+            return f"erro: {exc}"
+
+    def _esperar_chat(self, fila):
+        if fila.empty():
+            self.after(300, self._esperar_chat, fila)
+            return
+        self._falar("ia", fila.get())
+        self.campo_chat.config(state="normal")
 
 
 if __name__ == "__main__":

@@ -22,6 +22,10 @@ CATEGORIAS_CONTEUDO = ["Faturas", "Estudos", "Trabalho", "Pessoal", "Outros"]
 MAX_CHAMADAS_IA = 15
 INTERVALO_IA_SEG = 7.0
 
+# Chat: rotação rápida (1 tentativa por modelo, timeout curto).
+CHAT_TIMEOUT_SEG = 20.0
+CHAT_ESPERA_MODELOS = 1.0
+
 EXTENSAO_PARA_CATEGORIA = {
     ".pdf": "PDFs",
     ".doc": "Documentos",

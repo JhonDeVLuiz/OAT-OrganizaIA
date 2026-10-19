@@ -6,7 +6,8 @@ import time
 from dotenv import load_dotenv
 
 from . import regras, repositorio, seguranca
-from .config import CATEGORIAS, CATEGORIAS_CONTEUDO, MIN_CHARS_IA, TRECHO_MAX_CHARS
+from .config import (CATEGORIAS, CATEGORIAS_CONTEUDO, CHAT_ESPERA_MODELOS,
+                     CHAT_TIMEOUT_SEG, MIN_CHARS_IA, TRECHO_MAX_CHARS)
 
 LIMIAR_CONFIANCA = 0.7
 LIMIAR_NOME = 0.85
@@ -96,6 +97,32 @@ def _chamar_gemini(prompt, chave, esperar=time.sleep):
             if _eh_transitorio(exc) or "404" in str(exc) or "NOT_FOUND" in str(exc):
                 continue  # proximo modelo da rotatividade
             raise
+    raise ultimo
+
+
+def chamar_chat_roteando(pedir_por_modelo, timeout=None, esperar=time.sleep):
+    """Chat: 1 tentativa por modelo com timeout; falhou/estourou -> proximo modelo.
+
+    Diferente de chamar_com_retry (paciente, para lote): aqui a prioridade e
+    responder rapido — sem backoff longo, so a espera curta entre modelos.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    timeout = CHAT_TIMEOUT_SEG if timeout is None else timeout
+    ultimo = None
+    for i, nome in enumerate(modelos()):
+        if i:
+            esperar(CHAT_ESPERA_MODELOS)
+        pool = ThreadPoolExecutor(max_workers=1)
+        try:
+            return pool.submit(pedir_por_modelo, nome).result(timeout=timeout)
+        except FuturesTimeout:
+            ultimo = TimeoutError(f"timeout: {nome} nao respondeu em {timeout}s")
+        except Exception as exc:
+            ultimo = exc
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
     raise ultimo
 
 
