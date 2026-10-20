@@ -2,7 +2,7 @@
 
 ## Visão geral
 Organizador local de arquivos: observa `entrada/`, extrai texto, decide destino por
-regras ou IA (Gemini), move para `organizados/` e registra tudo em SQLite.
+regras ou IA (GLM no z.ai, formato Anthropic), move para `organizados/` e registra tudo em SQLite.
 Sem código neste arquivo — apenas o plano aprovado.
 
 ## Arquitetura (4 partes)
@@ -13,9 +13,9 @@ Sem código neste arquivo — apenas o plano aprovado.
 - **Banco (Fase 3):** `src/repositorio.py` (SQLite em `dados/`) integrado ao
   `organizador.py`, gravando movimentações e auditoria. Só metadados, nunca
   conteúdo de arquivo.
-- **IA (Fase 4):** `src/classificador.py` (Gemini via `google-genai`), chamada só
-  se `regras.py` não decidir.
-- **Chat (Fase 5):** `src/chat.py` — function calling do Gemini com
+- **IA (Fase 4):** `src/classificador.py` (GLM no z.ai, endpoint formato Anthropic),
+  chamada só se `regras.py` não decidir.
+- **Chat (Fase 5):** `src/chat.py` — function calling da IA (GLM) com
   `listar_arquivos`, `buscar_historico`, `mover_arquivo`, `desfazer_ultima_acao`.
 
 ## Estrutura de pastas
@@ -31,13 +31,13 @@ Sem código neste arquivo — apenas o plano aprovado.
   `.env` via `python-dotenv`, **lista fixa de categorias**.
 - `seguranca.py`: lista de exclusão (`.env`, chaves, senhas, documentos pessoais —
   nunca lidos nem enviados); mascaramento de CPF, cartão e e-mail antes de enviar
-  texto ao Gemini; validação de caminho com `Path.resolve()` confinado à raiz;
+  texto à IA; validação de caminho com `Path.resolve()` confinado à raiz;
   tamanho máximo de arquivo de 20 MB (configurável em `config.py`), extensões
   permitidas, e leitura de apenas um trecho curto do texto.
 - `monitor.py` + `main.py` nesta fase. `main.py`: `--once`, `--watch`,
   `--dry-run`, `--desfazer`, `--modo tipo|ia` (e `--chat` só na Fase 5).
 - `organizador.py`: modos `--modo tipo` (só regras por extensão, padrão, nenhuma
-  chamada à IA) e `--modo ia` (conteúdo via Gemini); `--dry-run` mostra o mesmo
+  chamada à IA) e `--modo ia` (conteúdo via GLM); `--dry-run` mostra o mesmo
   destino do real (mesmo caminho de classificação, cache por hash); log JSON em
   `logs/` com `{id, origem, destino, data}` (`id` único por execução); `--desfazer`
   desfaz a última execução inteira (todas as movimentações daquele `id`). A ferramenta `desfazer_ultima_acao` do chat
@@ -54,8 +54,8 @@ Sem código neste arquivo — apenas o plano aprovado.
 - Consultas sempre parametrizadas (`?`). Só metadados, nunca conteúdo de arquivo.
 
 ## Fase 4 — IA
-- Modo `tipo`: só regras por extensão, nenhuma chamada ao Gemini.
-- Modo `ia`: nome + trecho mascarado ao Gemini; categorias de conteúdo em
+- Modo `tipo`: só regras por extensão, nenhuma chamada à IA.
+- Modo `ia`: nome + trecho mascarado à IA (GLM no z.ai); categorias de conteúdo em
   `config.py` (Faturas, Estudos, Trabalho, Pessoal, Outros); JSON validado
   `{categoria, confianca}`.
 - Texto curto (< `MIN_CHARS_IA`): classifica só pelo nome, exige `>= 0.85`.
@@ -64,7 +64,7 @@ Sem código neste arquivo — apenas o plano aprovado.
   + aviso na tela; `Revisar/` só se as regras também não decidirem.
 - `MAX_CHAMADAS_IA` e `INTERVALO_IA_SEG` em `config.py`; cache por hash; sem
   reclassificar o mesmo hash.
-- Testes com mock, sem chamar o Gemini (modo degradado só-regras sem chave/rede).
+- Testes com mock, sem chamar a IA (modo degradado só-regras sem chave/rede).
 
 ## Fase 5 — Chat
 - Tools: `listar_arquivos`, `buscar_historico`, `ler_trecho`, `mover_arquivo`,
@@ -89,7 +89,7 @@ Sem código neste arquivo — apenas o plano aprovado.
 - **Fase 3:** rodar duas vezes o mesmo lote não duplica registros (`hash` UNIQUE);
   `auditoria` contém uma linha por movimentação.
 - **Fase 4:** `confianca < 0.7`, categoria inexistente ou JSON inválido →
-  `organizados/Revisar/`; mesmo `hash` nunca chama o Gemini duas vezes; testes
+  `organizados/Revisar/`; mesmo `hash` nunca chama a IA duas vezes; testes
   passam sem rede/chave (mock).
 - **Fase 5:** `mover_arquivo` pede confirmação e sem ela nada muda; caminho fora
   de `entrada/`/`organizados/` é recusado; `desfazer_ultima_acao` reverte a última

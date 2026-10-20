@@ -1,4 +1,4 @@
-"""Fase 5: chat com API simulada (nenhum teste fala com o Gemini)."""
+"""Fase 5: chat com API simulada (nenhum teste chama a IA de verdade)."""
 import json
 import sys
 from pathlib import Path
@@ -103,27 +103,21 @@ def test_mover_com_confirmacao_e_auditoria(tmp_path):
 
 
 def test_chamar_usa_modelo_do_classificador(tmp_path, monkeypatch):
-    import sys
-    import types
-
     from src import classificador
 
     capturado = {}
 
-    def _fake_generate_content(**kwargs):
-        capturado.update(kwargs)
-        return types.SimpleNamespace(text="ok simulado")
+    def _fake_post(_base, chave, modelo_nome, _prompt, _timeout):
+        capturado.update(chave=chave, modelo=modelo_nome)
+        return "ok simulado"
 
-    fake_genai = types.SimpleNamespace(
-        Client=lambda api_key=None: types.SimpleNamespace(
-            models=types.SimpleNamespace(generate_content=_fake_generate_content)))
-    monkeypatch.setitem(sys.modules, "google",
-                        types.SimpleNamespace(genai=fake_genai))
-    monkeypatch.setenv("GEMINI_API_KEY", "falsa")
+    monkeypatch.setattr(classificador, "_post_anthropic", _fake_post)
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
     sessao, _ = _sessao(tmp_path)
     sessao.chamar_ia = None
     assert sessao._chamar("oi") == "ok simulado"
-    assert capturado["model"] == classificador.modelo()
+    assert capturado["modelo"] == classificador.modelo()
+    assert capturado["chave"] == "falsa"
 
 
 def test_ler_fora_da_pasta_recusado(tmp_path):
@@ -213,11 +207,11 @@ def test_msg_sem_chave_e_api_ocupada(tmp_path):
 
     sessao, _ = _sessao(tmp_path, respostas=[])
     sessao.chamar_ia = _levanta(SemChave("sem chave"))
-    assert sessao.responder("oi") == "Sem GEMINI_API_KEY: configure a chave para conversar."
+    assert sessao.responder("oi") == "sem chave — configure a chave no .env para conversar."
     sessao.chamar_ia = _levanta(RuntimeError("503 UNAVAILABLE"))
     assert sessao.responder("oi") == "API ocupada, tente de novo em instantes."
     sessao.chamar_ia = _levanta(RuntimeError("resposta estranha"))
-    assert sessao.responder("oi") == "Falha ao falar com o Gemini. Tente de novo."
+    assert sessao.responder("oi") == "Falha ao falar com a IA. Tente de novo."
 
 
 def test_desfazer_tool_restaura(tmp_path):
@@ -292,24 +286,46 @@ def test_chat_todos_modelos_falham_vira_api_ocupada(monkeypatch, tmp_path):
     _roteador(monkeypatch, ["m1", "m2", "m3"])
     sessao, _ = _sessao(tmp_path)
     sessao.chamar_ia = None
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
 
-    import types
-
-    def _falha(**kwargs):
+    def _falha(*a, **k):
         raise RuntimeError("503 UNAVAILABLE")
 
-    fake_genai = types.SimpleNamespace(
-        Client=lambda api_key=None: types.SimpleNamespace(
-            models=types.SimpleNamespace(generate_content=_falha)))
-    import sys
-    monkeypatch.setitem(sys.modules, "google",
-                        types.SimpleNamespace(genai=fake_genai))
-    monkeypatch.setenv("GEMINI_API_KEY", "falsa")
+    monkeypatch.setattr(clf, "_post_anthropic", _falha)
 
     import time as _time
 
     monkeypatch.setattr(_time, "sleep", lambda s: None)
     assert sessao.responder("oi") == "API ocupada, tente de novo em instantes."
+
+
+def test_chat_glm_pula_modelo_falho(monkeypatch, tmp_path):
+    from src import classificador as clf
+
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
+
+    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
+        if modelo_nome == clf.GLM_MODELOS[0]:
+            raise RuntimeError("HTTP 429: Too Many Requests")
+        return "resposta glm simulada"
+
+    monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
+    import time as _time
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = None
+    assert sessao.responder("oi") == "resposta glm simulada"
+
+
+def test_chat_glm_sem_chave_mensagem(tmp_path, monkeypatch):
+    from src import classificador as clf
+
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    monkeypatch.setattr(clf, "load_dotenv", lambda *a, **k: False)
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = None
+    assert sessao.responder("oi") == (
+        "sem GLM_API_KEY — configure a chave no .env para conversar.")
 
 
 def test_criar_pasta_confirma_somente_em_organizados(tmp_path):
@@ -390,3 +406,165 @@ def test_mover_em_lote_parcial_e_recusa(tmp_path):
     assert (entrada / "b.txt").is_file()  # nao foi pedido ao lote, fica
     for acao, _ in vistos:
         assert acao == "mover_em_lote"
+
+
+def test_criar_arquivo_novo_nunca_sobrescreve(tmp_path):
+    organizados = tmp_path / "o"
+    pasta = organizados / "Textos"
+    pasta.mkdir(parents=True)
+    existente = pasta / "resumo.txt"
+    existente.write_text("versao que ja existia", encoding="utf-8")
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    ok = sessao._executar("criar_arquivo", {
+        "destino": str(existente), "texto": "resumo gerado pela ia"})
+    assert ok["ok"] is True
+    assert existente.read_text(encoding="utf-8") == "versao que ja existia"
+    assert (pasta / "resumo (1).txt").read_text(encoding="utf-8") == "resumo gerado pela ia"
+    fora = sessao._executar("criar_arquivo", {
+        "destino": str(tmp_path / "e" / "x.txt"), "texto": "fora"})
+    assert fora["ok"] is False
+    exclusao = sessao._executar("criar_arquivo", {
+        "destino": str(organizados / ".env"), "texto": "K=x"})
+    assert exclusao["ok"] is False and "exclusão" in exclusao["erro"]
+    recusa = _sessao(tmp_path, confirmar=lambda *a: False)[0]
+    negado = recusa._executar("criar_arquivo", {
+        "destino": str(organizados / "nota.txt"), "texto": "nada"})
+    assert negado["ok"] is False and not (organizados / "nota.txt").exists()
+
+
+def test_rodada_final_forca_resposta_texto(tmp_path):
+    pedidos = []
+    ferramenta = json.dumps({"tool": "listar_arquivos", "args": {}})
+
+    def _sempre_tool(_texto):
+        pedidos.append(_texto)
+        return ferramenta
+
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = _sempre_tool
+    (tmp_path / "o").mkdir()
+    limpo = chat.MAX_RODADAS
+    chat.MAX_RODADAS = 3
+    try:
+        final = sessao.responder("liste")
+    finally:
+        chat.MAX_RODADAS = limpo
+    assert final == "Limite de passos excedido. Tente um pedido menor."
+    assert "responda somente com texto" in pedidos[-1].lower()
+
+
+def test_chamada_repetida_nao_reexecuta(tmp_path):
+    ferramenta = json.dumps({"tool": "listar_arquivos", "args": {}})
+
+    def _roteado(_texto):
+        return ferramenta
+
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = _roteado
+    (tmp_path / "o").mkdir()
+    chamadas = []
+    original = sessao._t_listar
+    sessao.ferramentas["listar_arquivos"] = lambda args: chamadas.append(1) or original(args)
+    limpo = chat.MAX_RODADAS
+    chat.MAX_RODADAS = 3
+    try:
+        sessao.responder("liste de novo")
+    finally:
+        chat.MAX_RODADAS = limpo
+    assert len(chamadas) == 1  # repetida não executa de novo
+    assert "chamada repetida" in sessao.historico[-2]["texto"]
+
+
+def test_prefixo_ferramenta_executa_e_nao_vaza_cru(tmp_path):
+    brutos = [
+        'ferramenta: {"tool": "listar_arquivos", "args": {"base": "entrada"}}',
+        "Aqui estao os arquivos de entrada.",
+    ]
+    pedidos = []
+
+    def _ia(_texto):
+        pedidos.append(_texto)
+        return brutos.pop(0)
+
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = _ia
+    (tmp_path / "e").mkdir()
+    (tmp_path / "e" / "lista.txt").write_text("falso", encoding="utf-8")
+    final = sessao.responder("ve a lista de compras")
+    assert final == "Aqui estao os arquivos de entrada."
+    assert '"tool"' not in final  # JSON de tool nunca aparece pro usuario
+    assert "lista.txt" in sessao.historico[1]["texto"]  # ferramenta rodou
+
+
+def test_ferramenta_quebrada_nao_vaza_cru(tmp_path):
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = lambda _t: 'ferramenta: tool sem json'
+    final = sessao.responder("oi")
+    assert '"tool"' not in final and "ferramenta:" not in final
+    assert "bloqueado" in final
+
+
+def test_avisos_de_passo_sequencia(tmp_path):
+    avisos = []
+    ferramenta = json.dumps({"tool": "listar_arquivos", "args": {}})
+
+    def _ia(_texto):
+        return avisos.append(_texto) or ferramenta
+
+    sessao, _ = _sessao(tmp_path, respostas=None)
+    sessao.chamar_ia = _ia
+    (tmp_path / "o").mkdir()
+    seq = []
+    sessao.avisar = seq.append
+    final = sessao.responder("liste")
+    passos = [a for a in seq]
+    assert any("rodada 1" in a for a in passos)
+    assert any("executando listar_arquivos" in a for a in passos)
+    # avisos nunca levam conteudo de arquivo (sao metadados)
+    assert all("CONTEÚDO DO ARQUIVO" not in a for a in passos)
+
+
+def test_ler_arquivo_completo_mascarado(tmp_path):
+    (tmp_path / "e").mkdir()
+    (tmp_path / "e" / "doc.txt").write_text(
+        "cpf 123.456.789-09 e muito texto depois", encoding="utf-8")
+    sessao, _ = _sessao(tmp_path)
+    ok = sessao._executar("ler_arquivo", {"caminho": str(tmp_path / "e" / "doc.txt")})
+    assert ok["ok"] is True and "não confiável" in ok["texto"]
+    assert "123.456.789-09" not in ok["texto"] and "[CPF]" in ok["texto"]
+    exclusao = _sessao(tmp_path)[0]._executar(
+        "ler_arquivo", {"caminho": str(tmp_path / "e" / ".env")})
+    exclusao2 = sessao._executar("ler_arquivo", {"caminho": str(tmp_path / "e" / ".env")})
+    if (tmp_path / "e" / ".env").exists():
+        assert exclusao2["ok"] is False
+    longa = _sessao(tmp_path)[0]
+    g = tmp_path / "e" / "g.txt"
+    g.write_text("x" * (chat.config.LEITURA_COMPLETA_MAX_CHARS + 500), encoding="utf-8")
+    cortado = longa._executar("ler_arquivo", {"caminho": str(g)})
+    assert "cortado" in cortado["texto"]
+    assert len(cortado["texto"]) < chat.config.LEITURA_COMPLETA_MAX_CHARS + 200
+
+
+def test_ler_arquivo_compartilha_limite_5(tmp_path):
+    (tmp_path / "e").mkdir()
+    a = tmp_path / "e" / "a.txt"
+    a.write_text("falso", encoding="utf-8")
+    sessao, _ = _sessao(tmp_path)
+    for _ in range(3):
+        assert sessao._executar("ler_trecho", {"caminho": str(a)})["ok"] is True
+    for _ in range(2):
+        assert sessao._executar("ler_arquivo", {"caminho": str(a)})["ok"] is True
+    sexta = sessao._executar("ler_arquivo", {"caminho": str(a)})
+    assert sexta["ok"] is False and "5 leituras" in sexta["erro"]
+
+
+def test_extrair_chamada_tolerante_praticas():
+    argumentado = ("ferramenta: " + chr(123) + '"tool": "listar_arquivos", "args": '
+                   '{"base": "entrada"}' + chr(125))
+    assert chat.extrair_chamada(argumentado) == ("listar_arquivos", {"base": "entrada"})
+    em_frase = 'Vou listar. ' + chr(96)*3 + 'json ' + argumentado[12:]
+    assert chat.extrair_chamada(em_frase)[0] == "listar_arquivos"
+    # texto normal com chaves nao e tool
+    assert chat.extrair_chamada("use {colchetes} para listas") is None
+    assert chat.extrair_chamada('{"tool": 1}') is None
+    assert chat.extrair_chamada('{"tool": "x"}') is not None  # sem args vira {}

@@ -1,4 +1,4 @@
-"""Fase 4: classificador (tudo mock; nenhum teste chama o Gemini de verdade)."""
+"""Fase 4: classificador GLM (tudo mock; nenhum teste chama a API de verdade)."""
 import hashlib
 import sys
 from pathlib import Path
@@ -64,47 +64,52 @@ def test_retry_esgota_e_levanta():
 
 
 def test_rotatividade_modelo_falha_proximo(tmp_path, monkeypatch):
-    import sys
-    import types
-
     from src import classificador as clf
 
     tentados = []
 
-    def _fake_gc(model=None, contents=None):
-        tentados.append(model)
-        if model == "ruim":
-            raise RuntimeError("404 NOT_FOUND")
-        return types.SimpleNamespace(text="ok")
+    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
+        tentados.append(modelo_nome)
+        if modelo_nome == "ruim":
+            raise RuntimeError("HTTP 404: Not Found")
+        return "ok"
 
-    fake = types.SimpleNamespace(
-        Client=lambda api_key=None: types.SimpleNamespace(
-            models=types.SimpleNamespace(generate_content=_fake_gc)))
-    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(genai=fake))
-    monkeypatch.setattr(clf, "modelos", lambda: ["ruim", "bom"])
-    assert clf._chamar_gemini("oi", "k", esperar=lambda s: None) == "ok"
+    monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
+    monkeypatch.setattr(clf, "GLM_MODELOS", ["ruim", "bom"])
+    assert clf._chamar_glm("oi", "k", esperar=lambda s: None) == "ok"
     assert tentados == ["ruim", "bom"]
 
 
-def test_rotatividade_erro_final_nao_troca(tmp_path, monkeypatch):
-    import sys
-    import types
-
+def test_rotatividade_404_vai_para_o_proximo(tmp_path, monkeypatch):
     from src import classificador as clf
 
     tentados = []
 
-    def _fake_gc(model=None, contents=None):
-        tentados.append(model)
-        raise RuntimeError("401 sem autorizacao")
+    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
+        tentados.append(modelo_nome)
+        if modelo_nome == "ruim":
+            raise RuntimeError("HTTP 404: Not Found")
+        return "ok"
 
-    fake = types.SimpleNamespace(
-        Client=lambda api_key=None: types.SimpleNamespace(
-            models=types.SimpleNamespace(generate_content=_fake_gc)))
-    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(genai=fake))
-    monkeypatch.setattr(clf, "modelos", lambda: ["a", "b"])
+    monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
+    monkeypatch.setattr(clf, "GLM_MODELOS", ["ruim", "bom"])
+    assert clf._chamar_glm("oi", "k", esperar=lambda s: None) == "ok"
+    assert tentados == ["ruim", "bom"]
+
+
+def test_erro_final_chave_invalida_nao_troca(tmp_path, monkeypatch):
+    from src import classificador as clf
+
+    tentados = []
+
+    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
+        tentados.append(modelo_nome)
+        raise RuntimeError("HTTP 401: Unauthorized")
+
+    monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
+    monkeypatch.setattr(clf, "GLM_MODELOS", ["a", "b"])
     with pytest.raises(RuntimeError):
-        clf._chamar_gemini("oi", "k", esperar=lambda s: None)
+        clf._chamar_glm("oi", "k", esperar=lambda s: None)
     assert tentados == ["a"]
 
 
@@ -184,9 +189,70 @@ def test_exclusao_nunca_chama_ia():
 
 
 def test_sem_chave_sem_rede(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
     monkeypatch.setattr(classificador, "load_dotenv", lambda *a, **k: False)
     assert classificador.classificar_ia("x.xyz", "trecho") is None
+
+
+def test_glm_classifica_e_usa_o_primeiro_modelo(monkeypatch):
+    capturado = {}
+
+    def _fake_post(base, chave, modelo_nome, prompt, timeout):
+        capturado.update(base=base, chave=chave, modelo=modelo_nome, url=base)
+        return '{"categoria": "Faturas", "confianca": 0.9}'
+
+    monkeypatch.setattr(classificador, "_post_anthropic", _fake_post)
+    monkeypatch.setattr(classificador, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
+    resultado = classificador.classificar_conteudo("a.xyz", "x" * 30)
+    assert resultado == ("Faturas", 0.9)
+    assert capturado["modelo"] == classificador.modelos()[0]
+    assert capturado["chave"] == "falsa"
+    assert capturado["base"].endswith("/api/anthropic")
+
+
+def test_glm_sem_chave_motivo(monkeypatch):
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    monkeypatch.setattr(classificador, "load_dotenv", lambda *a, **k: False)
+    detalhe = {}
+    assert classificador.classificar_conteudo("a.xyz", "x" * 30, detalhe=detalhe) is None
+    assert detalhe["motivo"] == "sem-chave"
+
+
+def test_glm_rotatividade_para_o_proximo_modelo(monkeypatch):
+    dormidas = []
+    monkeypatch.setattr(classificador, "chamar_com_retry",
+                        lambda func, **k: func())
+
+    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
+        if modelo_nome == classificador.GLM_MODELOS[0]:
+            raise RuntimeError("HTTP 429: Too Many Requests")
+        return '{"categoria": "Faturas", "confianca": 0.9}'
+
+    monkeypatch.setattr(classificador, "_post_anthropic", _fake_post)
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
+    resultado = classificador._chamar_glm("p", "falsa",
+                                          esperar=dormidas.append)
+    assert resultado.startswith('{"categoria"')
+    assert dormidas == [classificador.GLM_ESPERA_MODELOS]
+
+
+def test_glm_todos_modelos_falham(monkeypatch):
+    monkeypatch.setattr(classificador, "chamar_com_retry",
+                        lambda func, **k: func())
+
+    def _fake_post(*a, **k):
+        raise RuntimeError("HTTP 500: Internal Server Error")
+
+    monkeypatch.setattr(classificador, "_post_anthropic", _fake_post)
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
+    detalhe = {}
+    saida = classificador.classificar_conteudo("a.xyz", "x" * 30, detalhe=detalhe)
+    assert saida is None and detalhe["motivo"] == "falha"
+
+
+def test_modelos_fixos_do_glm():
+    assert classificador.modelos() == classificador.GLM_MODELOS
 
 
 def test_regras_decididas_nao_chamam_ia(tmp_path, monkeypatch):

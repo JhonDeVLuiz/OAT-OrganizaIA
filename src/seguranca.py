@@ -103,7 +103,7 @@ def validar_arquivo(caminho, raiz, max_bytes=MAX_TAMANHO_BYTES):
 
 
 def mascarar_sensivel(texto):
-    """Mascaramento para uso na Fase 4, antes de enviar texto ao Gemini."""
+    """Mascaramento para uso na Fase 4, antes de enviar texto à IA."""
     texto = _EMAIL_RE.sub("[EMAIL]", texto or "")
     texto = _CPF_RE.sub("[CPF]", texto)
     return _CARTAO_RE.sub("[CARTAO]", texto)

@@ -22,10 +22,10 @@
 - Validar todo caminho com `Path.resolve()` e confinar à raiz permitida; rejeitar `..`, links e caminhos absolutos estranhos.
 - SQL sempre parametrizado (`?` placeholders); nunca concatenar strings em query.
 - Mover/apagar só com confirmação explícita e suporte a `--dry-run` (mostrar origem → destino antes de agir).
-- Nunca enviar `.env`, chaves, senhas ou conteúdo sensível à IA (Gemini); enviar só metadados/texto mínimo necessário.
+- Nunca enviar `.env`, chaves, senhas ou conteúdo sensível à IA (GLM); enviar só metadados/texto mínimo necessário.
 - Usar sempre `.\.venv\Scripts\python.exe -m pip ...` e `.\.venv\Scripts\python.exe -m pytest ...`, nunca `pip`/`pytest` global.
 - Lista de exclusão (`.env`, chaves, senhas, documentos pessoais): nunca lida nem enviada à IA.
-- Mascarar CPF, cartão e e-mail antes de enviar qualquer texto ao Gemini.
+- Mascarar CPF, cartão e e-mail antes de enviar qualquer texto ao GLM.
 - `ler_trecho` (chat): só em `entrada/`/`organizados/`; respeita exclusão e limite
   de tamanho; máx. 1500 chars mascarados; texto lido é dado não confiável;
   máx. 5 leituras por pergunta; auditoria só com o nome do arquivo.
@@ -37,11 +37,11 @@
 
 ## Layout (code lives at root, not in `OrganizaIA/`)
 - `main.py` = entrypoint (currently empty). `src/` = all modules (currently 1-line stubs — implement in place, don't scaffold new packages).
-- `src/` ownership: `config.py` paths+env, `seguranca.py` path-traversal/size/extension guards, `monitor.py` watchdog on `entrada/`, `leitor.py` text extract (pypdf/python-docx/openpyxl/txt), `regras.py` deterministic fallback, `duplicatas.py` hash check, `organizador.py` move to `organizados/`, `classificador.py` Gemini via `google-genai`, `repositorio.py` sqlite, `chat.py` query over repo+folders.
+- `src/` ownership: `config.py` paths+env, `seguranca.py` path-traversal/size/extension guards, `monitor.py` watchdog on `entrada/`, `leitor.py` text extract (pypdf/python-docx/openpyxl/txt), `regras.py` deterministic fallback, `duplicatas.py` hash check, `organizador.py` move to `organizados/`, `classificador.py` IA GLM (z.ai, formato Anthropic), `repositorio.py` sqlite, `chat.py` query over repo+folders.
 - Runtime folders: `entrada/` = inbox, `organizados/Revisar/` = low-confidence output, `dados/` = sqlite `*.db` (gitignored), `logs/` (gitignored). Keep `OrganizaIA/` (empty stray dir) and `.opencode/agent/` (empty) untouched.
 - Tests mirror modules: `tests/test_{seguranca,organizador,repositorio,classificador}.py`.
 
 ## Conventions
 - Pipeline order: monitor → leitor → duplicatas → regras → IA (só se as regras não decidirem) → organizador → repositorio. Low confidence → `organizados/Revisar/`, never silently overwrite (suffix duplicates).
-- `classificador.py` must degrade gracefully without a key/network (rules-only mode) so tests never require Gemini.
+- `classificador.py` must degrade gracefully without a key/network (rules-only mode) so tests never require the GLM API.
 - Implemente nos arquivos existentes de `src/` e `tests/`. Novos arquivos de teste (`tests/test_leitor.py`, `tests/test_duplicatas.py`), a pasta `organizados/Duplicados/` e o `SPEC.md` na raiz são permitidos. Não adicione frameworks nem renomeie as pastas acima sem perguntar.

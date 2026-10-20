@@ -22,9 +22,17 @@ CATEGORIAS_CONTEUDO = ["Faturas", "Estudos", "Trabalho", "Pessoal", "Outros"]
 MAX_CHAMADAS_IA = 15
 INTERVALO_IA_SEG = 7.0
 
+LEITURA_COMPLETA_MAX_CHARS = 8000
+
 # Chat: rotação rápida (1 tentativa por modelo, timeout curto).
 CHAT_TIMEOUT_SEG = 20.0
 CHAT_ESPERA_MODELOS = 1.0
+
+# IA: GLM (z.ai, endpoint em formato Anthropic). Chave: GLM_API_KEY. Modelos Flash sao gratis.
+GLM_BASE_URL = "https://api.z.ai/api/anthropic"
+GLM_MODELOS = ["glm-4.7-flash", "glm-4.5-flash"]
+GLM_TIMEOUT_SEG = 45.0
+GLM_ESPERA_MODELOS = 1.0
 
 EXTENSAO_PARA_CATEGORIA = {
     ".pdf": "PDFs",

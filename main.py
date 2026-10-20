@@ -22,7 +22,7 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="mostra sem mover")
     ap.add_argument("--desfazer", action="store_true", help="desfaz a ultima execucao")
     ap.add_argument("--modo", choices=["tipo", "ia"], default="tipo",
-                    help="tipo: so regras; ia: conteudo via Gemini (padrao: tipo)")
+                    help="tipo: so regras; ia: conteudo via GLM (padrao: tipo)")
     ap.add_argument("--chat", action="store_true", help="conversa com o organizador")
     ap.add_argument("--exportar", metavar="DESTINO.zip", help="exporta backup (banco+manifest)")
     ap.add_argument("--importar", metavar="BACKUP.zip", help="importa backup")
@@ -31,7 +31,7 @@ def main(argv=None):
 
     if args.chat:
         from src import chat as chat_mod
-        chat_mod.iniciar()
+        chat_mod.iniciar(avisar=lambda texto: print(f"[passo] {texto}"))
         return 0
     if args.exportar:
         from src import backup as backup_mod

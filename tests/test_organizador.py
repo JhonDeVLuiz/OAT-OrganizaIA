@@ -182,7 +182,8 @@ def test_ia_indisponivel_preview(tmp_path, monkeypatch):
     entrada, organizados, logs, banco = _pastas(tmp_path)
     (entrada / "m.xyz").write_text(CONTEUDO_LONGO, encoding="utf-8")
     monkeypatch.setattr(_clf, "load_dotenv", lambda *a, **k: False)
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
     _mock_leitor_legivel(monkeypatch)
     seco = organizador.processar(entrada, organizados, logs, dry_run=True,
                                  db_path=banco, modo="ia")
@@ -237,7 +238,8 @@ def test_modo_ia_indisponivel_fallback_regras(tmp_path, monkeypatch):
     (entrada / "m.xyz").write_text(CONTEUDO_LONGO + " diferente", encoding="utf-8")
     _mock_leitor_legivel(monkeypatch)
     monkeypatch.setattr(_clf, "load_dotenv", lambda *a, **k: False)
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
     real = organizador.processar(entrada, organizados, logs, db_path=banco, modo="ia")
     por_destino = {Path(m["destino"]).name: m for m in real["movimentos"]}
     assert por_destino["n.txt"]["categoria"] == "Textos"

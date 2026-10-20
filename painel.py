@@ -68,13 +68,45 @@ class Painel(tk.Tk):
         self.saida.see("end")
 
     def _atualizar_listas(self):
-        for lb, pasta in ((self.lista_entrada, config.ENTRADA_DIR),
-                          (self.lista_org, config.ORGANIZADOS_DIR)):
+        """Atualiza listas com glob() otimizado, sem congelar GUI."""
+        def _atualizar_em_thread():
+            resultados = {}
+            for nome_pasta, pasta in (("entrada", config.ENTRADA_DIR),
+                                      ("org", config.ORGANIZADOS_DIR)):
+                arquivos = []
+                if pasta.is_dir():
+                    # ✅ glob() em vez de rglob() - muito mais rápido
+                    # ✅ Ignora pastas pesadas
+                    for p in sorted(pasta.glob("*")):
+                        if p.is_file():
+                            arquivos.append(p.relative_to(pasta).as_posix())
+                        elif p.is_dir() and p.name not in {'.venv', '.git', '__pycache__', '.pytest_cache'}:
+                            # Listagem simples de subpastas (sem recursão)
+                            for sub in sorted(p.glob("*")):
+                                if sub.is_file():
+                                    arquivos.append(sub.relative_to(pasta).as_posix())
+                resultados[nome_pasta] = arquivos
+            return resultados
+
+        # Processa em thread para não travar GUI
+        fila = queue.Queue()
+        threading.Thread(target=lambda: fila.put(_atualizar_em_thread()), daemon=True).start()
+        self._esperar_listas(fila)
+
+    def _esperar_listas(self, fila):
+        """Espera resultado da thread de atualização."""
+        try:
+            resultados = fila.get_nowait()
+        except queue.Empty:
+            self.after(100, self._esperar_listas, fila)
+            return
+
+        # Atualiza GUI com resultados
+        for lb, chave in ((self.lista_entrada, "entrada"),
+                          (self.lista_org, "org")):
             lb.delete(0, "end")
-            if pasta.is_dir():
-                for p in sorted(pasta.rglob("*")):
-                    if p.is_file():
-                        lb.insert("end", p.relative_to(pasta).as_posix())
+            for arquivo in resultados[chave]:
+                lb.insert("end", arquivo)
 
     def _resultado(self, res):
         for mov in res["movimentos"]:
@@ -183,28 +215,41 @@ class Painel(tk.Tk):
         self.texto_testes.pack(fill="both", expand=True, padx=8, pady=6)
 
     def _pytest(self):
+        """Roda pytest em thread separada para não congelar GUI."""
         self.status_pytest.config(text="rodando...")
+        self.texto_testes.delete("1.0", "end")
+        self.texto_testes.insert("end", "Processando testes...\n")
         fila = queue.Queue()
 
         def _rodar():
-            proc = subprocess.run([str(PYTHON), "-m", "pytest", "-q"],
-                                  capture_output=True, text=True, cwd=str(BASE))
-            fila.put(proc)
+            try:
+                proc = subprocess.run([str(PYTHON), "-m", "pytest", "-q"],
+                                      capture_output=True, text=True, cwd=str(BASE))
+                fila.put(("sucesso", proc))
+            except Exception as e:
+                fila.put(("erro", str(e)))
 
         threading.Thread(target=_rodar, daemon=True).start()
         self._esperar_pytest(fila)
 
     def _esperar_pytest(self, fila):
+        """Espera resultado do pytest rodando em thread."""
         try:
-            proc = fila.get_nowait()
+            status, resultado = fila.get_nowait()
         except queue.Empty:
-            self.after(300, self._esperar_pytest, fila)
+            self.after(200, self._esperar_pytest, fila)
             return
+
         self.texto_testes.delete("1.0", "end")
-        self.texto_testes.insert("end", proc.stdout + proc.stderr)
-        ok = proc.returncode == 0
-        self.status_pytest.config(text="PASSOU" if ok else "FALHOU",
-                                  foreground="green" if ok else "red")
+        if status == "erro":
+            self.texto_testes.insert("end", f"Erro: {resultado}")
+            self.status_pytest.config(text="ERRO", foreground="red")
+        else:
+            proc = resultado
+            self.texto_testes.insert("end", proc.stdout + proc.stderr)
+            ok = proc.returncode == 0
+            self.status_pytest.config(text="PASSOU" if ok else "FALHOU",
+                                      foreground="green" if ok else "red")
 
     # ---- Chat ----
     def _aba_chat(self, abas):
@@ -212,14 +257,32 @@ class Painel(tk.Tk):
         abas.add(f, text="Chat")
         self.texto_chat = tk.Text(f, state="disabled")
         self.texto_chat.pack(fill="both", expand=True, padx=8, pady=6)
+        self.area_barra = ttk.Frame(f)
+        self.area_barra.pack(fill="x", padx=8, pady=(0, 2))
+        self.barra = ttk.Progressbar(self.area_barra, mode="indeterminate")
+        self.status_chat = ttk.Label(self.area_barra, text="", foreground="#555")
+        self.status_chat.pack(side="left", fill="x", expand=True, padx=4)
         baixo = ttk.Frame(f)
         baixo.pack(fill="x", padx=8, pady=6)
         self.campo_chat = ttk.Entry(baixo)
         self.campo_chat.pack(side="left", fill="x", expand=True)
         self.campo_chat.bind("<Return>", lambda _e: self._perguntar())
         ttk.Button(baixo, text="Enviar", command=self._perguntar).pack(side="left", padx=4)
-        self.sessao = chat_mod.ChatSession(confirmar=confirmar_gui)
-        self._falar("ia", "Chat pronto. Sem chave/rede, respondo que falhou — ferramentas só via Gemini.")
+        self.sessao = chat_mod.ChatSession(confirmar=confirmar_gui,
+                                           avisar=self._aviso_chat)
+        self._falar("ia", "Chat pronto. Sem chave/rede, respondo que falhou — ferramentas só via GLM.")
+
+    def _aviso_chat(self, texto):
+        self.fila_chat.put(("aviso", texto))
+
+    def _barrar_chat(self, ligada):
+        if ligada:
+            self.barra.pack(fill="x", padx=0, pady=(0, 2), before=self.status_chat)
+            self.barra.start(12)
+        else:
+            self.barra.stop()
+            self.barra.pack_forget()
+            self.status_chat.config(text="")
 
     def _falar(self, quem, texto):
         self.texto_chat.config(state="normal")
@@ -229,16 +292,20 @@ class Painel(tk.Tk):
 
     def _perguntar(self):
         pergunta = self.campo_chat.get().strip()
-        if not pergunta:
+        if not pergunta or str(self.campo_chat.cget("state")) == "disabled":
             return
         self.campo_chat.delete(0, "end")
         self._falar("voce", pergunta)
-        self._falar("ia", "pensando...")
+        self._falar("ia", "...")
         self.campo_chat.config(state="disabled")
-        fila = queue.Queue()
-        threading.Thread(target=lambda: fila.put(self._responder_seguro(pergunta)),
-                         daemon=True).start()
-        self.after(300, self._esperar_chat, fila)
+        self._barrar_chat(True)
+        self.status_chat.config(text="Iniciando...")
+        self.fila_chat = queue.Queue()
+        threading.Thread(
+            target=lambda: self.fila_chat.put(
+                ("pronto", self._responder_seguro(pergunta))),
+            daemon=True).start()
+        self.after(200, self._esperar_chat)
 
     def _responder_seguro(self, pergunta):
         try:
@@ -246,11 +313,22 @@ class Painel(tk.Tk):
         except Exception as exc:  # noqa: BLE001 - painel de teste
             return f"erro: {exc}"
 
-    def _esperar_chat(self, fila):
-        if fila.empty():
-            self.after(300, self._esperar_chat, fila)
+    def _esperar_chat(self):
+        pronto = None
+        try:
+            while True:
+                tipo, valor = self.fila_chat.get_nowait()
+                if tipo == "aviso":
+                    self.status_chat.config(text=valor)
+                else:
+                    pronto = valor
+        except queue.Empty:
+            pass
+        if pronto is None:
+            self.after(200, self._esperar_chat)
             return
-        self._falar("ia", fila.get())
+        self._barrar_chat(False)
+        self._falar("ia", pronto)
         self.campo_chat.config(state="normal")
 
 

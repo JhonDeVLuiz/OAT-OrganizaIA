@@ -18,7 +18,7 @@ def _base_com_banco(tmp_path):
     repositorio.iniciar_banco(banco)
     repositorio.salvar_arquivo(banco, "h1", str(base / "e" / "a.txt"),
                                str(base / "o" / "a.txt"), "Textos", "regras")
-    (base / ".env").write_text("GEMINI_API_KEY=falsa", encoding="utf-8")
+    (base / ".env").write_text("GLM_API_KEY=falsa", encoding="utf-8")
     return base, banco
 
 

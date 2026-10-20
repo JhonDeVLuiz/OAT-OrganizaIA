@@ -1,4 +1,4 @@
-"""Fase 4: Gemini so se as regras nao decidirem. Falha vira Revisar, nunca excecao."""
+"""Fase 4: IA (GLM/z.ai) so se as regras nao decidirem. Falha vira Revisar, nunca excecao."""
 import json
 import os
 import time
@@ -7,24 +7,24 @@ from dotenv import load_dotenv
 
 from . import regras, repositorio, seguranca
 from .config import (CATEGORIAS, CATEGORIAS_CONTEUDO, CHAT_ESPERA_MODELOS,
-                     CHAT_TIMEOUT_SEG, MIN_CHARS_IA, TRECHO_MAX_CHARS)
+                     CHAT_TIMEOUT_SEG, GLM_BASE_URL, GLM_ESPERA_MODELOS,
+                     GLM_MODELOS, GLM_TIMEOUT_SEG, MIN_CHARS_IA, TRECHO_MAX_CHARS)
 
 LIMIAR_CONFIANCA = 0.7
 LIMIAR_NOME = 0.85
-MODELO_PADRAO = "gemini-flash-latest"  # override via GEMINI_MODEL
-MODELOS_FALLBACK = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.6-flash"]
 TENTATIVAS_IA = 3
 
 
 class SemChave(RuntimeError):
-    """GEMINI_API_KEY ausente (modo so-regras / chat indisponivel)."""
+    """GLM_API_KEY ausente (modo so-regras / chat indisponivel)."""
 
 
 _TRANSITORIO_TIPOS = {
     "ServerError", "TimeoutError", "Timeout", "ResourceExhausted", "ServiceUnavailable",
 }
 _TRANSITORIO_TEXTO = (
-    "503", "429", "unavailable", "resource_exhausted", "timeout", "timed out", "temporar",
+    "503", "429", "unavailable", "resource_exhausted", "timeout", "timed out",
+    "temporar", "529", "overloaded",
 )
 
 
@@ -49,22 +49,19 @@ def chamar_com_retry(func, tentativas=TENTATIVAS_IA, esperar=time.sleep):
     raise ultimo
 
 
-def carregar_chave():
-    """GEMINI_API_KEY via python-dotenv. None se ausente (modo so-regras)."""
+def chave_glm():
+    """GLM_API_KEY (z.ai) via python-dotenv. None se ausente."""
     load_dotenv()
-    return os.getenv("GEMINI_API_KEY") or None
+    return os.getenv("GLM_API_KEY") or None
+
+
+def modelos():
+    """Lista de rotatividade do GLM."""
+    return list(GLM_MODELOS)
 
 
 def modelo():
     return modelos()[0]
-
-
-def modelos():
-    """GEMINI_MODEL sozinho ou a lista de rotatividade (fallback)."""
-    unico = os.getenv("GEMINI_MODEL")
-    if unico:
-        return [unico]
-    return list(MODELOS_FALLBACK)
 
 
 def montar_prompt(nome, trecho):
@@ -77,27 +74,6 @@ def montar_prompt(nome, trecho):
         f"Nome do arquivo: {nome}\n"
         f"Trecho do conteudo: {(trecho or '')[:TRECHO_MAX_CHARS]}"
     )
-
-
-def _chamar_gemini(prompt, chave, esperar=time.sleep):
-    from google import genai
-
-    cliente = genai.Client(api_key=chave)
-    ultimo = None
-    for nome in modelos():
-        def _pedir(_nome=nome):
-            resposta = cliente.models.generate_content(model=_nome, contents=prompt)
-            texto = getattr(resposta, "text", None) or str(resposta)
-            return texto or ""
-
-        try:
-            return chamar_com_retry(_pedir, esperar=esperar)
-        except Exception as exc:
-            ultimo = exc
-            if _eh_transitorio(exc) or "404" in str(exc) or "NOT_FOUND" in str(exc):
-                continue  # proximo modelo da rotatividade
-            raise
-    raise ultimo
 
 
 def chamar_chat_roteando(pedir_por_modelo, timeout=None, esperar=time.sleep):
@@ -124,6 +100,77 @@ def chamar_chat_roteando(pedir_por_modelo, timeout=None, esperar=time.sleep):
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
     raise ultimo
+
+
+def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout):
+    """POST /v1/messages (formato Anthropic) e devolve o texto concatenado."""
+    import urllib.error
+    import urllib.request
+
+    url = base_url.rstrip("/") + "/v1/messages"
+    corpo = json.dumps({
+        "model": modelo_nome,
+        "max_tokens": 1024,
+        "thinking": {"type": "disabled"},
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+    pedido = urllib.request.Request(url, data=corpo, method="POST", headers={
+        "x-api-key": chave,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(pedido, timeout=timeout) as resposta:
+            dados = json.loads(resposta.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
+    textos = [b.get("text", "") for b in dados.get("content", [])
+              if isinstance(b, dict) and b.get("type") == "text"]
+    bruto = "".join(textos)
+    if not bruto:
+        raise RuntimeError("resposta vazia do provedor")
+    return bruto
+
+
+def _chamar_glm(prompt, chave, esperar=time.sleep):
+    """Rotatividade paciente (lote): glm-4.7-flash -> glm-4.5-flash."""
+    ultimo = None
+    for i, nome in enumerate(GLM_MODELOS):
+        if i and GLM_ESPERA_MODELOS:
+            esperar(GLM_ESPERA_MODELOS)
+
+        def _pedir(_nome=nome):
+            return _post_anthropic(GLM_BASE_URL, chave, _nome, prompt,
+                                   GLM_TIMEOUT_SEG)
+
+        try:
+            return chamar_com_retry(_pedir, esperar=esperar)
+        except Exception as exc:
+            if "401" in str(exc) or "403" in str(exc):
+                raise  # chave invalida: nenhum modelo vai resolver
+            ultimo = exc
+    raise ultimo
+
+
+def _chamar_provedor(prompt, esperar=time.sleep):
+    """Chamada classica (lote); SemChave se faltar chave."""
+    chave = chave_glm()
+    if not chave:
+        raise SemChave("sem GLM_API_KEY")
+    return _chamar_glm(prompt, chave, esperar=esperar)
+
+
+def chamar_modelo_rota(nome, prompt):
+    """1 chamada num modelo do GLM (usada pelo chat rapido)."""
+    chave = chave_glm()
+    if not chave:
+        raise SemChave("sem GLM_API_KEY")
+    return _post_anthropic(GLM_BASE_URL, chave, nome, prompt, GLM_TIMEOUT_SEG)
+
+
+def chave_ativa():
+    """Chave do GLM (so para saber se ha IA; nunca imprime)."""
+    return chave_glm()
 
 
 def extrair_json(texto):
@@ -173,13 +220,12 @@ def classificar_ia(nome, trecho, categorias=None, chamar_ia=None, detalhe=None):
     if seguranca.excluido(nome):
         _motivo("rejeitado")
         return None
-    chave = carregar_chave()
-    if not chave and chamar_ia is None:
+    if not chave_ativa() and chamar_ia is None:
         _motivo("sem-chave")  # sem chave: modo so-regras
         return None
     prompt = montar_prompt(nome, seguranca.mascarar_sensivel(trecho or ""))
     try:
-        bruto = chamar_ia(prompt) if chamar_ia else _chamar_gemini(prompt, chave)
+        bruto = chamar_ia(prompt) if chamar_ia else _chamar_provedor(prompt)
     except Exception:
         _motivo("falha")  # timeout, rede, cota: vira Revisar, nunca derruba
         return None
@@ -213,15 +259,14 @@ def classificar_conteudo(nome, trecho, categorias=None, chamar_ia=None, detalhe=
     if seguranca.excluido(nome):
         _motivo("rejeitado")
         return None
-    chave = carregar_chave()
-    if not chave and chamar_ia is None:
+    if not chave_ativa() and chamar_ia is None:
         _motivo("sem-chave")
         return None
     curto = len((trecho or "").strip()) < MIN_CHARS_IA
     prompt = montar_prompt_conteudo(
         nome, seguranca.mascarar_sensivel(trecho or ""), cats, so_nome=curto)
     try:
-        bruto = chamar_ia(prompt) if chamar_ia else _chamar_gemini(prompt, chave)
+        bruto = chamar_ia(prompt) if chamar_ia else _chamar_provedor(prompt)
     except Exception:
         _motivo("falha")
         return None
