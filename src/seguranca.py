@@ -14,10 +14,8 @@ PALAVRAS_EXCLUIDAS = (
     "password",
     "secret",
     "token",
-    "documento",
-    "documentos",
-    "pessoal",
-    "pessoais",
+    "Cartão",
+    "Credito"
 )
 
 _CPF_RE = re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b")
