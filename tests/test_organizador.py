@@ -291,3 +291,42 @@ def test_cache_hash_uma_chamada(tmp_path, monkeypatch):
     r1 = organizador._processar_um(entrada / "m.xyz", indice=set(), **kwargs)
     r2 = organizador._processar_um(entrada / "m.xyz", indice=set(), **kwargs)
     assert len(chamadas) == 1 and r1["destino"] == r2["destino"]
+
+
+def test_avisar_registra_passos_por_arquivo(tmp_path):
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "a.txt").write_text("uno", encoding="utf-8")
+    (entrada / "b.txt").write_text("dos", encoding="utf-8")
+    eventos = []
+    organizador.processar(entrada, organizados, logs, db_path=banco,
+                          modo="tipo", avisar=eventos.append)
+    passos = [e for e in eventos if e.startswith("processando ")]
+    assert any("a.txt" in e for e in passos)
+    assert any("b.txt" in e for e in passos)
+
+
+def test_avisar_recebe_aviso_da_ia_sem_conteudo(tmp_path, monkeypatch):
+    from src import classificador as _clf
+
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "n.txt").write_text(CONTEUDO_LONGO, encoding="utf-8")
+    _mock_leitor_legivel(monkeypatch)
+    monkeypatch.setattr(_clf, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
+    eventos = []
+    organizador.processar(entrada, organizados, logs, db_path=banco,
+                          modo="ia", avisar=eventos.append)
+    assert any("IA indisponível" in e for e in eventos)
+    # log so tem metadados: nenhum trecho do conteudo do arquivo
+    assert all(CONTEUDO_LONGO.strip() not in e for e in eventos)
+
+
+def test_processar_um_sem_callback_fica_igual(tmp_path, monkeypatch):
+    """Sem avisar, comportamento identico ao antigo (terminal nao ganha print)."""
+    entrada, organizados, logs, banco = _pastas(tmp_path)
+    (entrada / "a.txt").write_text("texto", encoding="utf-8")
+    r = organizador.processar_um(entrada / "a.txt", entrada=entrada,
+                                 organizados=organizados, logs=logs,
+                                 db_path=banco, modo="tipo")
+    assert r["movimentos"][0]["status"] == "movido"
+    assert r["avisos"] == []

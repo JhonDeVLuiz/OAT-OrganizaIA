@@ -1,0 +1,25 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+CHECKLIST DE MUDANÇA (exemplo inventado) - Trabalho OrganizaIA
+
+Antes do dia (1 semana):
+[ ] pedir orcamento de 3 transportadoras demo
+[ ] agendar dia de recolha de fumos (feira exemplo)
+[ ] reservar caixas (20 grandes, 10 medianas)
+
+Na semana:
+[ ] embalar livros: 2 caixas medianas
+[ ] utensilios de cozinha: 3 caixas grandes
+[ ] roupas: sacolas + malas demo
+[ ] marcar desligamento da internet na residência antiga (dia 30)
+
+No dia:
+[ ] conferir caixa por caixa com lista impressa
+[ ] tirar foto de contadores (água e luz demo)
+[ ] entregar chaves ao sindico exemplo
+
+Depois:
+[ ] trocar endereço no banco demo
+[ ] atualizar cadastro da escola exemplo
+[ ] comprar luminária nova para sala (R$ alocação fake)
+
+Tudo ficticio, para treinar categoria Outros/Trabalho.

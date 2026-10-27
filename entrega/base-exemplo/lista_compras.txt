@@ -1,0 +1,25 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+LISTA DE COMPRAS DA SEMANA (exemplo criado pelo trabalho)
+
+- arroz 5 kg
+- feijao 2 pacotes
+- cafe 500 g
+- leite 6 caixas
+- macarrao integral
+- tomate 1 kg
+- cebola 1 kg
+- alho maior
+- papel higienico 12 rolos
+- detergente 2
+- sabonete 4
+- pilha AA (4)
+- remédio de dor de cabeca (exemplo generico)
+- pao de forma
+- ovos 1 bandeja
+- fralda (não usar exemplo)          
+- bateria AAA (2)
+- farinha de trigo 1 kg
+
+Restricoes da casa demo: nenhum alimento com amendoa.
+Orçamento alvo: R$ 420,00 (max R$ 450).
+Compra feita dia: sábado pela manha antes das 10.

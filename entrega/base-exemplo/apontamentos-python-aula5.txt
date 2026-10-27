@@ -1,0 +1,23 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+APONTAMENTOS DA AULA 5 - INTRODUCAO A PYTHON (professor demo)
+
+Tema da aula: funcoes e coleções.
+
+def saudacao(nome):
+    return "Ola, " + nome  # exemplo
+
+listas (mutáveis) x tuplas (imutáveis).
+dicionario: { "chave": valor } - acesso por chave, O(1) na media.
+set: sem duplicados, boa para deduplicar (assim como o sha256 do projeto!).
+
+Funcoes utis mostradas na aula (exemplos):
+- sorted(lista, reverse=True)
+- "".join(pedacos)
+- enumerate / zip
+
+Exercicio da aula demo: escreveral funcao que soma so os pares de uma lista.
+
+Erro da aula anterior corrigido: esquecer o "return" faz a funcao
+devolver None (silencioso e comum).
+
+Para a prova: saberei explicar diferença de list(set()) vs set().

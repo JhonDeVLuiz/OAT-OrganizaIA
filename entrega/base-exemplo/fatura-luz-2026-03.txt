@@ -1,0 +1,28 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+COMPANHIA DE ENERGIA EXEMPLO S.A.
+FATURA DE ENERGIA ELETRICA - REF. MARCO/2026
+
+Instalacao (exemplo): 000000000-0
+Cliente: MARIA SOARES FICTICIA
+CPF/CNPJ: 000.000.000-00
+Endereco: Rua Ficticia das Palmeiras, 120 - Apto 302
+Bairro: Jardim Exemplo - Cidade Demo - CEP 00000-000
+
+Vencimento: 20/03/2026
+Valor total: R$ 184,73
+
+Resumo do consumo:
+- Leitura anterior: 04/02/2026   kwh: 1250
+- Leitura atual:    03/03/2026   kwh: 1394
+- Consumo do mes: 144 kwh
+- Media diaria de consumo: 4,64 kwh
+
+Itens de cobranca:
+- Energia consumida (144 kwh): R$ 152,10
+- Iluminacao publica: R$ 9,85
+- Bandeira vermelha: R$ 22,78
+
+Codigo de barras (inventado): 00000.00000 00000.000000 00000.000000 0 00000000000000
+
+Situacao: NAO CANCELADA (exemplo de classificacao: categoria Faturas).
+Este texto e usado como base ficticia do trabalho OrganizaIA.

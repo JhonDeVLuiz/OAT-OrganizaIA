@@ -1,0 +1,21 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+EXERCICIOS DE SQL NIVEL BASICO (lista inventada para o Estudos)
+
+Tabelas de treino (esquema exemplo):
+  alunos(id, nome, matricula)
+  notas(id, aluno_id, disciplina, valor)
+  cursos(id, nome, carga_horaria)
+
+1) Liste todos os alunos ordenados por nome.
+2) Conte quantas notas existem por disciplina.
+3) Mostre a media das notas por aluno acima de 7.
+4) Encontre alunos sem nota alguma (LEFT JOIN + IS NULL).
+5) Liste alunos e suas disciplinas com INNER JOIN.
+6) Insira 3 alunos fake com VALUES e depois ALTERE o nome de um deles.
+7) DELETE as notas abaixo de 3 (dentro de transacao com ROLLBACK).
+8) Crie indice em notas(aluno_id) e compare EXPLAIN QUERY PLAN.
+9) Monte consulta com GROUP BY e HAVING que lista disciplinas com media >= 8.
+10) Escreva consulta parametrizada no formato: WHERE nome = ? (dica do professor).
+
+Entrega: arquivo .txt com suas queries, sem dados reais.
+Dica da corretora demo: use tabelas pequenas primeiro.

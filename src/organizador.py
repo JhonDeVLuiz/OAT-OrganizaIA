@@ -94,14 +94,16 @@ def _processar_um(caminho, entrada, organizados, indice, max_bytes,
     }
 
 
-def _novo_orcamento():
-    return {"usadas": 0, "avisado": False, "avisos": []}
+def _novo_orcamento(avisar=None):
+    return {"usadas": 0, "avisado": False, "avisos": [], "avisar": avisar}
 
 
 def _avisar(orcamento, texto):
     if orcamento is not None and not orcamento["avisado"]:
         orcamento["avisado"] = True
         orcamento["avisos"].append(texto)
+        if orcamento.get("avisar"):
+            orcamento["avisar"](texto)
 
 
 def _fallback_regras(nome, motivo, orcamento):
@@ -144,7 +146,8 @@ def _decidir_modo_ia(origem, nome, resumo, db_path, cache_ia, orcamento):
 
 
 def processar(entrada=None, organizados=None, logs=None, dry_run=False,
-              max_bytes=None, db_path=None, modo="tipo"):
+              max_bytes=None, db_path=None, modo="tipo", avisar=None):
+    aviso = avisar or (lambda texto: None)
     entrada = Path(entrada or config.ENTRADA_DIR)
     organizados = Path(organizados or config.ORGANIZADOS_DIR)
     logs = Path(logs or config.LOGS_DIR)
@@ -156,11 +159,13 @@ def processar(entrada=None, organizados=None, logs=None, dry_run=False,
     banco = db_path or config.DB_PATH
     if not dry_run:
         repositorio.iniciar_banco(banco)
-    cache_ia, orcamento = {}, _novo_orcamento()
+    cache_ia = {}
+    orcamento = _novo_orcamento(avisar)
     movidos, ignorados = [], []
     for item in sorted(entrada.iterdir()):
         if not item.is_file():
             continue
+        aviso(f"processando {item.name}...")
         resultado = _processar_um(item, entrada, organizados, indice, max_bytes,
                                   db_path=banco, usar_ia=True, cache_ia=cache_ia,
                                   modo=modo, orcamento=orcamento)
@@ -192,8 +197,11 @@ def processar(entrada=None, organizados=None, logs=None, dry_run=False,
 
 
 def processar_um(caminho, entrada=None, organizados=None, logs=None,
-                 dry_run=False, max_bytes=None, db_path=None, modo="tipo"):
+                 dry_run=False, max_bytes=None, db_path=None, modo="tipo",
+                 avisar=None):
     """Uma so arquivo (usado pelo monitor). Gera log proprio se mover."""
+    aviso = avisar or (lambda texto: None)
+    aviso(f"processando {Path(caminho).name}...")
     entrada = Path(entrada or config.ENTRADA_DIR)
     organizados = Path(organizados or config.ORGANIZADOS_DIR)
     logs = Path(logs or config.LOGS_DIR)
@@ -203,13 +211,13 @@ def processar_um(caminho, entrada=None, organizados=None, logs=None,
     if not dry_run:
         repositorio.iniciar_banco(db_path or config.DB_PATH)
 
-    orcamento = _novo_orcamento()
+    orcamento = _novo_orcamento(avisar)
     resultado = _processar_um(caminho, entrada, organizados,
                               duplicatas.indice_hashes(organizados, logs), max_bytes,
                               db_path=(db_path or config.DB_PATH), usar_ia=True,
                               cache_ia={}, modo=modo, orcamento=orcamento)
-    for aviso in orcamento["avisos"]:
-        print(f"[aviso] {aviso}")
+    for texto in orcamento["avisos"]:
+        print(f"[aviso] {texto}")
     if resultado["status"] == "ignorado" or dry_run:
         return {"id": None, "movimentos": [resultado],
                 "ignorados": [], "dry_run": dry_run, "avisos": orcamento["avisos"],

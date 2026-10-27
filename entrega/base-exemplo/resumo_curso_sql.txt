@@ -1,0 +1,17 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+RESUMO - CURSO DE SQL PROFISSIONAL (aulas 1 a 8, versao estudante)
+
+Aula 1: SELECT basico. SELECT coluna, coluna2 FROM tabela WHERE filtro;
+Aula 2: funcoes de agregacao (COUNT, SUM, AVG) e GROUP BY sem HAVING.
+Aula 3: JOINs. INNER JOIN cruza o que existe nas duas; LEFT JOIN mantem da esquerda.
+Aula 4: subconsultas; cuidado com correlacionada (custo alto).
+Aula 5: indices B-tree: ajudam em WHERE/ORDER BY; LIKE '%x%' os ignora.
+Aula 6: transacoes: BEGIN, COMMIT, ROLLBACK; niveis de isolamento.
+Aula 7: normalização 1FN, 2FN, 3FN, com exemplo de tabela de pedidos.
+Aula 8: planos de execucao - EXPLAIN QUERY PLAN no SQLite; SET STATISTICS TIME no SQL Server.
+
+Dica do professor demo: medir ANTES e DEPOIS da otimizacao, nunca confiar
+na intuicao. Colocar 100 mil linhas ficticias e ver o plano de execucao.
+
+Erros clássicos apresentados: confiar em OR sem indice; usar OR de colunas
+sem indice; esquecer de COMMIT; usar LIKE sem escape de % e _.

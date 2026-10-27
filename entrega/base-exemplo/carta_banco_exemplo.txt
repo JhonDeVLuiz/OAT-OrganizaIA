@@ -1,0 +1,22 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+BANCO EXEMPLO S.A.
+Aviso de pendencia (carta inventada, fim didatico)
+
+Ref.: Agência 0000-0 - Conta 00000000-0
+Cliente: MARIA SOARES FICTICIA - CPF 000.000.000-00
+
+Prezada cliente,
+
+Detectamos em nossos sistemas de exemplo uma movimentacao incomum
+nesta conta nos dias 10 e 11 de marco de 2026.
+
+Orientamos (procedimento inventado para o trabalho):
+1. Acessar o aplicativo (versão demo) e validar os ultimos lançamentos.
+2. Caso reconheça todos, dispensamos contato.
+3. Caso NÃO reconheca, ligar para o telefone ficticio 0000-000-0000.
+
+Registramos taxa de servico ajustada: anuidade do cartao exemplo
+inciando em R$ 0,00 nos 90 dias de demonstracao.
+
+Atenciosamente, diretoria do Banco Exemplo.
+Este documento foi criado somente para treinar classificação de Pessoal.

@@ -1,0 +1,20 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+PLANO DE ESTUDOS - MATEMATICA/ENGENHARIA (exemplo do trabalho)
+Periodo: 01 de marco a 30 de abril de 2026 - Aluno demo [];
+
+Meta: avancar 3 capitulos de calculo e 2 de algebra linear por mes.
+
+SEGUNDA (90 min): derivadas - exercicios par/impares.
+TERCA  (60 min): revisão de limites + correção de duvidas no caderno.
+QUARTA (90 min): integrais por partes; lista dos professores demo.
+QUINTA (60 min): algebra linear - matrizes e determinos.
+SEXTA  (90 min): simulado de 10 questoes com gabarito.
+SABADO (2h): projeto do curso - exercicios de programa aplicada.
+
+Recursos:
+- Apostila exemplo alpha (PDF ficticio).
+- Playlist "calculo para eng demo" (link inventado).
+- Fichas de formula criadas por mim (exemplo).
+
+Ordem do dia: 5 min revisao de formula; 60 min exercicio; 25 min correcao.
+Recompensa semanal: sexta a noite livre se cumprir 5/6 dias.

@@ -1,0 +1,26 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+ROTEIRO DE VIAGEM (EXEMPLO) - ferias demo, cidade de exemplo
+
+DIA 1 - chegada
+- voo demonstrativo chegadas 14:00 (aeroporto demo)
+- check-in pousada exemplo (reserva ficticia 000000)
+- jantar na praca central da cidade demo
+
+DIA 2 - passeios
+- museu demo das manhas (entrada R$ 20 fake)
+- mercado local (compras: queijo demo, mel demo)
+- tarde livre na orla exemplo
+
+DIA 3 - dia no parque
+- trilha leve de 4 km (guia demo)
+- cachoeira exemplo (levar agua e calçado demo)
+
+DIA 4 - despedida
+- cafe da manha demo
+- voo ficticio de volta as 18:10
+
+Orcamento total inventado: R$ 2.300,00
+Estimativa por item: passagem R$ 900; hospedagem R$ 850; tours R$ 300;
+resto R$ 250 (alimentacao e extras).
+
+Todos nomes, valores e lugares sao para teste de classificação Outros.

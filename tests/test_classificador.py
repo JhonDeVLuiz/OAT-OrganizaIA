@@ -75,7 +75,7 @@ def test_rotatividade_modelo_falha_proximo(tmp_path, monkeypatch):
         return "ok"
 
     monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
-    monkeypatch.setattr(clf, "GLM_MODELOS", ["ruim", "bom"])
+    monkeypatch.setattr(clf, "IA_MODELOS", ["ruim", "bom"])
     assert clf._chamar_glm("oi", "k", esperar=lambda s: None) == "ok"
     assert tentados == ["ruim", "bom"]
 
@@ -92,7 +92,7 @@ def test_rotatividade_404_vai_para_o_proximo(tmp_path, monkeypatch):
         return "ok"
 
     monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
-    monkeypatch.setattr(clf, "GLM_MODELOS", ["ruim", "bom"])
+    monkeypatch.setattr(clf, "IA_MODELOS", ["ruim", "bom"])
     assert clf._chamar_glm("oi", "k", esperar=lambda s: None) == "ok"
     assert tentados == ["ruim", "bom"]
 
@@ -107,7 +107,7 @@ def test_erro_final_chave_invalida_nao_troca(tmp_path, monkeypatch):
         raise RuntimeError("HTTP 401: Unauthorized")
 
     monkeypatch.setattr(clf, "_post_anthropic", _fake_post)
-    monkeypatch.setattr(clf, "GLM_MODELOS", ["a", "b"])
+    monkeypatch.setattr(clf, "IA_MODELOS", ["a", "b"])
     with pytest.raises(RuntimeError):
         clf._chamar_glm("oi", "k", esperar=lambda s: None)
     assert tentados == ["a"]
@@ -203,6 +203,7 @@ def test_glm_classifica_e_usa_o_primeiro_modelo(monkeypatch):
 
     monkeypatch.setattr(classificador, "_post_anthropic", _fake_post)
     monkeypatch.setattr(classificador, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.setattr(classificador, "IA_BASE_URL", "https://api.z.ai/api/anthropic")
     monkeypatch.setenv("GLM_API_KEY", "falsa")
     resultado = classificador.classificar_conteudo("a.xyz", "x" * 30)
     assert resultado == ("Faturas", 0.9)
@@ -223,9 +224,10 @@ def test_glm_rotatividade_para_o_proximo_modelo(monkeypatch):
     dormidas = []
     monkeypatch.setattr(classificador, "chamar_com_retry",
                         lambda func, **k: func())
+    monkeypatch.setattr(classificador, "IA_MODELOS", ["a", "b"])
 
     def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
-        if modelo_nome == classificador.GLM_MODELOS[0]:
+        if modelo_nome == "a":
             raise RuntimeError("HTTP 429: Too Many Requests")
         return '{"categoria": "Faturas", "confianca": 0.9}'
 
@@ -251,8 +253,39 @@ def test_glm_todos_modelos_falham(monkeypatch):
     assert saida is None and detalhe["motivo"] == "falha"
 
 
-def test_modelos_fixos_do_glm():
-    assert classificador.modelos() == classificador.GLM_MODELOS
+def test_modelos_da_ia():
+    assert classificador.modelos() == classificador.IA_MODELOS
+
+
+def test_ia_modelos_do_env(monkeypatch):
+    """IA_MODELOS no .env sobrescreve a rotatividade (ex.: modelos Claude)."""
+    from src import config as cfg
+
+    monkeypatch.setenv("IA_MODELOS", "claude-haiku-4-5, claude-sonnet-4-5")
+    assert cfg._modelos_da_ia() == ["claude-haiku-4-5", "claude-sonnet-4-5"]
+    monkeypatch.setenv("IA_MODELOS", "  ,  ,claude-haiku-4-5,")
+    assert cfg._modelos_da_ia() == ["claude-haiku-4-5"]
+    monkeypatch.delenv("IA_MODELOS", raising=False)
+    assert cfg._modelos_da_ia() == ["glm-4.7-flash", "glm-4.5-flash"]
+
+
+def test_ia_base_url_do_env(monkeypatch):
+    """IA_BASE_URL no .env muda o gateway sem tocar em codigo."""
+    import os as _os
+    import subprocess
+    import sys
+
+    env = dict(_os.environ)
+    env["IA_BASE_URL"] = "https://gateway.exemplo.site"
+    env["IA_MODELOS"] = "claude-haiku-4-5"
+    env.pop("GLM_API_KEY", None)
+    codigo = ("from src import config as c; "
+              "print(c.IA_BASE_URL, c.IA_MODELOS)")
+    saida = subprocess.run([sys.executable, "-c", codigo], env=env,
+                           capture_output=True, text=True,
+                           cwd=str(env.get("TESTS_CWD", _os.getcwd())))
+    linha = saida.stdout.strip()
+    assert linha == "https://gateway.exemplo.site ['claude-haiku-4-5']", linha
 
 
 def test_regras_decididas_nao_chamam_ia(tmp_path, monkeypatch):

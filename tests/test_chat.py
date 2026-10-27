@@ -303,9 +303,10 @@ def test_chat_glm_pula_modelo_falho(monkeypatch, tmp_path):
     from src import classificador as clf
 
     monkeypatch.setenv("GLM_API_KEY", "falsa")
+    monkeypatch.setattr(clf, "IA_MODELOS", ["a", "b"])
 
     def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
-        if modelo_nome == clf.GLM_MODELOS[0]:
+        if modelo_nome == "a":
             raise RuntimeError("HTTP 429: Too Many Requests")
         return "resposta glm simulada"
 

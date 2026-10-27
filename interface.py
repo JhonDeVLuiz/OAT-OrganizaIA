@@ -61,6 +61,16 @@ class Interface(tk.Tk):
         self.progresso.pack(fill='x',padx=14,pady=(0,9)); self.progresso.bind('<Configure>',self._barra)
         self.label(sec,'',9,color=MUTED,textvariable=self.status).pack(pady=(0,12))
 
+        seclog=self.painel(esq); seclog.pack(fill='both',expand=True,pady=(0,10))
+        self.label(seclog,'Registo de atividade (chamadas de API e passos)',11,True).pack(anchor='w',padx=14,pady=(12,7))
+        self.log=tk.Text(seclog,bg=BG,fg=MUTED,wrap='word',state='disabled',relief='flat',
+                         font=('Consolas',9),padx=10,pady=8,height=8)
+        self.log.pack(fill='both',expand=True,padx=12,pady=(0,12))
+        self.rolagem=tk.Scrollbar(seclog,command=self.log.yview,bg=PANEL2,relief='flat')
+        self.rolagem.pack(side='right',fill='y',padx=(0,12))
+        self.log.configure(yscrollcommand=self.rolagem.set)
+        self._log('Interface iniciada. Aguardando ação.')
+
         cab=tk.Frame(direita,bg=PANEL); cab.pack(fill='x')
         self.label(cab,'💬  Chat com OrganizaIA',15,True).pack(anchor='w',padx=14,pady=15)
         tk.Frame(direita,bg=BORDER,height=1).pack(fill='x')
@@ -77,6 +87,16 @@ class Interface(tk.Tk):
         self.historico.tag_configure('bot',foreground='#b5d9ff'); self.historico.tag_configure('user',foreground='#d8fce9')
         self._mensagem('bot','Olá! Selecione uma pasta ao lado, configure sua API Key e me diga como quer organizar seus arquivos.')
         self.label(self,'API: configure GLM_API_KEY no ambiente ou arquivo .env',9,color=MUTED).pack(anchor='e',padx=23,pady=(0,8))
+
+    def _log(self,texto):
+        """Registo de metadados (nunca conteudo de arquivo nem chave). Cap 500 linhas."""
+        from datetime import datetime
+        agora=datetime.now().strftime('%H:%M:%S')
+        self.log.configure(state='normal')
+        self.log.insert('end',f'[{agora}] {texto}\n')
+        linhas=int(self.log.index('end-1c').split('.')[0])
+        if linhas>500:self.log.delete('1.0',f'{linhas-500}.0')
+        self.log.configure(state='disabled');self.log.see('end')
 
     def _barra(self,event=None):
         self.progresso.delete('all'); w=self.progresso.winfo_width()
@@ -110,11 +130,14 @@ class Interface(tk.Tk):
         destino=pasta/'OrganizaIA_Organizados'
         if not messagebox.askyesno('Confirmar organização',f'Organizar os arquivos de:\n{pasta}\n\nDestino: {destino}\n\nOs arquivos serão movidos. Deseja continuar?'):return
         def job():
-            self.after(0,lambda:self.status.set('Organizando arquivos...'))
-            resultado=organizador.processar(entrada=pasta,organizados=destino,modo=self.modo.get())
+            self.after(0,lambda:(self.status.set('Organizando arquivos...'),self._log('Organização iniciada')))
+            resultado=organizador.processar(entrada=pasta,organizados=destino,
+                                            modo=self.modo.get(),
+                                            avisar=lambda texto:self.after(0,self._log,texto))
             movidos=len(resultado.get('movimentos',[]));ignorados=len(resultado.get('ignorados',[]))
             msg=f'Organização concluída: {movidos} arquivos processados; {ignorados} ignorados.'
-            self.after(0,lambda:(self.status.set(msg),self._mensagem('bot',msg)))
+            self.after(0,lambda:(self.status.set(msg),self._mensagem('bot',msg),
+                                 self._log(f'Organização concluída: {movidos} processados, {ignorados} ignorados')))
         self._rodar(job)
 
     def _enviar(self):
@@ -125,7 +148,10 @@ class Interface(tk.Tk):
         self.entrada.delete(0,'end');self._mensagem('user',pergunta)
         def job():
             if self.sessao is None:
-                self.sessao=ChatSession(entrada=pasta,organizados=pasta/'OrganizaIA_Organizados',confirmar=self._confirmar_chat)
+                self._log('Chat iniciado (IA configurada com GLM_API_KEY/.env)')
+                self.sessao=ChatSession(entrada=pasta,organizados=pasta/'OrganizaIA_Organizados',
+                                        confirmar=self._confirmar_chat,
+                                        avisar=lambda texto:self.after(0,self._log,texto))
             resposta=self.sessao.responder(pergunta)
             self.after(0,lambda:self._mensagem('bot',resposta))
         self._rodar(job)

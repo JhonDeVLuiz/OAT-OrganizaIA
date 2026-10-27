@@ -1,0 +1,22 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+CIA DE AGUA DEMO
+FATURA DE AGUA E ESGOTO - REFERENCIA FEVEREIRO/2026
+
+Instalacao exemplo: 24500000000-1
+Cliente: MARIA SOARES FICTICIA - CPF 000.000.000-00
+Endereco: Rua Ficticia das Palmeiras, 120, Apto 302 - CEP 00000-000
+
+Volume consumido: 11 m3
+Tarifa de agua (11 m3):          R$ 68,75
+Servico de esgoto (60%):         R$ 41,25
+Contribuo municipal:             R$ 3,20
+TOTAL:                           R$ 113,20
+Vencimento: 15/03/2026
+
+Historico ficticio (m3): 12 - 10 - 13 - 11 - 9 - 11
+Media dos ultimos 6 meses: 11,0 m3
+
+Cd de barras (inventado): 8 00000000 00000000 00000000 0 000
+Codigo da fatura: DEMO-2026-02-000111
+
+Emissao: 01/03/2026 via site exemplo.

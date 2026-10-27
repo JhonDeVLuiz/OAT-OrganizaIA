@@ -1,0 +1,23 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+PADARIA DO BAIRRO DEMO - CNPJ inventado 00.000.000/0001-00
+NOTA FISCAL SIMPLIFICADA = DOCUMENTO FICTICIO DE TREINO
+
+Consumidor: MARIA SOARES FICTICIA (CPF na nota: nao informado)
+Data: 12/03/2026 14:32          Cupom: 999000
+
+Itens:
+- Pao frances 1/2 kg ............ R$ 9,80
+- Bolo de cenoura fatia ........ R$ 8,50
+- Cafe coado grande ............ R$ 6,00
+- Leite integral caixa ......... R$ 5,20
+- Queijo mussarela 150 g ....... R$ 12,90
+- Sabonete liquido 250 ml ...... R$ 7,50
+
+Total itens: 6                  Subtotal: R$ 49,90
+Desconto fidelidade:            R$ 2,00
+TOTAL: R$ 47,90                 Pagamento: cartao de debito
+
+Codigo de cupom inventado: 2026-03-12-999000000
+Autorizacao da operadora (inventada): 00/0000000
+
+Guardado por tres meses (cliente ficticio).

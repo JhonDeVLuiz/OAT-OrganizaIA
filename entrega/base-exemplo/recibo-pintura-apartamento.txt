@@ -1,0 +1,20 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+RECIBO DE SERVICO SIMPLES (MODELO DE TREINO - TUDO INVENTADO)
+
+Recebemos de MARIA SOARES FICTICIA (CPF 000.000.000-00)
+a importancia de R$ 890,00 (oitocentos e noventa reais)
+referente a pintura do apartamento demo, endereco ficticio:
+Rua Ficticia das Palmeiras, 120 - Apto 302.
+
+Servicos prestado (inventados para treinar classificação Trabalho):
+- massa corrida em 2 paredes da sala
+- pintura acrilica da sala e 2 quartos (tecto)
+- retoque de rodapes (3 pecas)
+
+Executado nos dias 18 a 21 de fevereiro de 2026.
+Sem riscos de garantia de materiais (termo exemplo).
+
+Prestador: JOSE TINTAS DEMO - CPF 333.333.333-33 (inventado)
+Assinado ficticiamente em duas vias.
+
+Obs: documento criado apenas para teste do organizador OrganizaIA.

@@ -1,0 +1,21 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+CONTRATO DE PRESTACAO DE SERVICOS INTELIGENTES (MODELO FICTICIO)
+
+CONTRATANTE: Maria Soares Ficticia, CPF 000.000.000-00.
+CONTRATADO: Analista demo Ltda. (CNPJ inventado 00.000.000/0002-00).
+
+CL 1 - OBJETO: formalização de 12 horas mensais de consultoria de
+dados para o trabalho OrganizaIA (escopo exempolo).
+
+CL 2 - VALOR: R$ 1.800,00/mes, boleto vence dia 5.
+Houras extra: R$ 90,00/h, somadas na fatura seguinte (teto 10 h).
+
+CL 3 - VIGENCIA: 01/03/2026 a 28/02/2027 (renovação automática fictional).
+
+CL 4 - CONFIDENCIALIDADE: as informacoes trocadas sao de teste;
+nenhuma informacao real e utilizada neste tramite.
+
+CL 5 - RESCISAO: 30 dias de aviso previo.
+
+Assinaturas ficticias das duas partes em cidade demo.
+Esse contrato demonstra a categoria Trabalho no organizador.

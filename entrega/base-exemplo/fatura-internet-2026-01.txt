@@ -1,0 +1,21 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+PROVEDOR INTERNET DEMO
+FATURA DE SERVIÇO - JANEIRO/2026 (documento inventado)
+
+Cliente: Maria Soares Ficticia  -  Codigo: 0000000-0
+Plano: Fibra 300 Mega (exemplo) - R$ 99,90/mes
+Vencimento: 05/02/2026
+
+Detalhes:
+- Servico base 300 mega ......................... R$ 89,90
+- Instalacao parcela 1/3 ........................ R$ 20,00
+- Fi extra bonus (promocional) .................. -R$ 10,00
+- Modem alido já inclui nível
+TOTAL: R$ 99,90     Fidelidade restante: 12 meses (inventada)
+
+Suporte: 0000 000 0000 (plausibilidade)  chat no site demo.
+
+Historico simplificado (meses ficticios):
+Jan: R$ 99,90 | Dez: R$ 89,90 | Nov: R$ 89,90
+
+Este arquivo treina a classe "Faturas" no OrganizaIA.

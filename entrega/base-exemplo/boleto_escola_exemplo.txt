@@ -1,0 +1,23 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+COLlegio DEMO Ltda.
+BOLETO DE MENSALIDADE ESCOLAR - MARCO/2026
+
+Aluno: PEDRO FICTICIO SOARES    Turma: 6 ano   Matricula: 000000
+Responsavel: MARIA SOARES FICTICIA (CPF 000.000.000-00)
+E-mail de contato: nao-responda@exemplo.com
+
+Item: Mensalidade escolar
+Valor: R$ 480,00
+Vencimento: 10/03/2026
+Desconto por pontualidade: R$ 24,00 (ate o dia 07)
+Valor com desconto: R$ 456,00
+
+Onde pagar: qualquer banco, lotérica ou aplicativo do banco exemplo.
+Segunda via: secretaria virtual (exemplo).
+
+Avisos da escola (exemplo):
+- Lembrete de reuniao de pais em 20/03.
+- Prazo de entrega de lista de material: 15/03.
+- Nao esqueça o uniforme dos meses de frio.
+
+Este boleto existe apenas para treinar classificación (categoria Faturas).

@@ -1,0 +1,18 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+CRONOGRAMA DE TCC (EXEMPLO) - CURSO DE REDES DE COMPUTADORES
+Aluno demo []	                Orientador ficticio: Prof. demo
+
+Entregas do semestre 2026-1 (datas inventadas):
+04/03 - Definicao do tema e bibliografia inicial (8 referencias fake).
+11/03 - Proposta de metodologia (1 pagina).
+18/03 - Revisao 1: estrutura de capitulos aprovada (orientador demo).
+25/03 - Coleta de dados de laboratorio (pt1) - switch household.
+01/04 - Resultados parciais (graficos de latencia exemplo).
+15/04 - Revisao 2: escrito completo do capitulo 2.
+29/04 - Banco de dados da simulação ok.
+13/05 - Revisao 3 final com corretor externo.
+20/05 - Impresao + entrega eletrónica na secretaria demo.
+27/05 - Defesa publica (sala demo, banca de 3).
+
+Riscos mapeados (exemplo): falha de laboratorio; atraso no revisor.
+Plano B: simulador gratuito de rede para reproducir dados fake.

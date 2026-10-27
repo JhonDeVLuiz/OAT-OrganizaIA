@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 
 from . import regras, repositorio, seguranca
 from .config import (CATEGORIAS, CATEGORIAS_CONTEUDO, CHAT_ESPERA_MODELOS,
-                     CHAT_TIMEOUT_SEG, GLM_BASE_URL, GLM_ESPERA_MODELOS,
-                     GLM_MODELOS, GLM_TIMEOUT_SEG, MIN_CHARS_IA, TRECHO_MAX_CHARS)
+                     CHAT_TIMEOUT_SEG, IA_BASE_URL, IA_MODELOS,
+                     GLM_ESPERA_MODELOS, GLM_TIMEOUT_SEG, MIN_CHARS_IA,
+                     TRECHO_MAX_CHARS)
 
 LIMIAR_CONFIANCA = 0.7
 LIMIAR_NOME = 0.85
@@ -56,8 +57,8 @@ def chave_glm():
 
 
 def modelos():
-    """Lista de rotatividade do GLM."""
-    return list(GLM_MODELOS)
+    """Lista de rotatividade da IA (IA_MODELOS do .env) — ex.: claude com haiku."""
+    return list(IA_MODELOS)
 
 
 def modelo():
@@ -118,6 +119,9 @@ def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout):
         "x-api-key": chave,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
+        # Gateways atrás de Cloudflare (ex.: codigo 1010) recusam UA default do urllib.
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
     })
     try:
         with urllib.request.urlopen(pedido, timeout=timeout) as resposta:
@@ -133,14 +137,14 @@ def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout):
 
 
 def _chamar_glm(prompt, chave, esperar=time.sleep):
-    """Rotatividade paciente (lote): glm-4.7-flash -> glm-4.5-flash."""
+    """Rotatividade paciente (lote): primeiro modelo -> proximo da lista."""
     ultimo = None
-    for i, nome in enumerate(GLM_MODELOS):
+    for i, nome in enumerate(modelos()):
         if i and GLM_ESPERA_MODELOS:
             esperar(GLM_ESPERA_MODELOS)
 
         def _pedir(_nome=nome):
-            return _post_anthropic(GLM_BASE_URL, chave, _nome, prompt,
+            return _post_anthropic(IA_BASE_URL, chave, _nome, prompt,
                                    GLM_TIMEOUT_SEG)
 
         try:
@@ -161,11 +165,11 @@ def _chamar_provedor(prompt, esperar=time.sleep):
 
 
 def chamar_modelo_rota(nome, prompt):
-    """1 chamada num modelo do GLM (usada pelo chat rapido)."""
+    """1 chamada num modelo da IA (usada pelo chat rapido)."""
     chave = chave_glm()
     if not chave:
         raise SemChave("sem GLM_API_KEY")
-    return _post_anthropic(GLM_BASE_URL, chave, nome, prompt, GLM_TIMEOUT_SEG)
+    return _post_anthropic(IA_BASE_URL, chave, nome, prompt, GLM_TIMEOUT_SEG)
 
 
 def chave_ativa():

@@ -1,0 +1,24 @@
+DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.
+FOLHA DE PAGAMENTO (ADMINISTRADORA EXEMPLO ME)
+Referência: fevereiro/2026          Empregada: ANA FICTICIA SOUZA
+Cargo: secretaria assistente        CPF: 222.222.222-22
+CTPS ficticia: 000000-00            Admissão: 03/03/2024
+
+PROVENTOS
+Salario base:                 R$ 2.450,00
+Hora extra 50% (4h):          R$ 132,00
+Adicional noturno:            R$ 68,00
+Total de provementos:         R$ 2.650,00
+
+DESCONTOS
+INSS (tabela ficticia):       R$ 240,75
+IRRF:                         R$ 35,40
+Vale transporte (6%):         R$ 76,00
+Plano de saude (exemplo):     R$ 95,00
+Total de descontos:           R$ 447,15
+
+LIQUIDO A RECEBER:            R$ 2.202,85
+
+Deposito em conta exemple 0000-0 ag 00000-9 conta 00000000-0.
+Base FGTS: R$ 2.650,00    FGTS do mes: R$ 212,00
+Doc recebido por e-mail inventado em 05/03/2026.
