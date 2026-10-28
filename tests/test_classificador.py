@@ -288,6 +288,42 @@ def test_ia_base_url_do_env(monkeypatch):
     assert linha == "https://gateway.exemplo.site ['claude-haiku-4-5']", linha
 
 
+def test_ia_base_url_sem_https_e_recusada(monkeypatch):
+    """Chave nunca pode trafegar em claro: http:// derruba na importacao."""
+    import os as _os
+    import subprocess
+    import sys
+
+    env = dict(_os.environ)
+    env["IA_BASE_URL"] = "http://gateway.exemplo.site"
+    env.pop("GLM_API_KEY", None)
+    codigo = "from src import config"
+    saida = subprocess.run([sys.executable, "-c", codigo], env=env,
+                           capture_output=True, text=True,
+                           cwd=str(env.get("TESTS_CWD", _os.getcwd())))
+    assert saida.returncode != 0
+    assert "https://" in saida.stderr
+
+
+def test_base_dir_congelado_usa_pasta_do_exe():
+    """No .exe (PyInstaller) dados e .env ficam ao lado do executavel."""
+    import os as _os
+    import subprocess
+    import sys
+
+    env = dict(_os.environ)
+    env.pop("GLM_API_KEY", None)
+    codigo = (
+        "import sys; sys.frozen = True; "
+        "sys.executable = r'C:\\Programa\\OrganizaIA.exe'; "
+        "from src import config as c; print(c.BASE_DIR)")
+    saida = subprocess.run([sys.executable, "-c", codigo], env=env,
+                           capture_output=True, text=True,
+                           cwd=str(_os.getcwd()))
+    assert saida.returncode == 0, saida.stderr
+    assert saida.stdout.strip().lower() == r"c:\programa", saida.stdout
+
+
 def test_regras_decididas_nao_chamam_ia(tmp_path, monkeypatch):
     entrada, organizados, logs, banco = (tmp_path / n for n in ("e", "o", "l", "b.db"))
     entrada.mkdir()

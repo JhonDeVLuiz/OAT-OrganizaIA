@@ -433,6 +433,118 @@ def test_criar_arquivo_novo_nunca_sobrescreve(tmp_path):
     assert negado["ok"] is False and not (organizados / "nota.txt").exists()
 
 
+def test_criar_arquivo_pdf(tmp_path):
+    from pypdf import PdfReader
+
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    ok = sessao._executar("criar_arquivo", {
+        "destino": str(tmp_path / "o" / "Relatorios" / "resumo.pdf"),
+        "texto": "Linha um do PDF\nLinha dois com acentuação: ação, coração\n"
+                 "\nParágrafo final do resumo"})
+    assert ok["ok"] is True and ok["tipo"] == "PDF"
+    caminho = Path(ok["destino"])
+    assert caminho.read_bytes()[:5] == b"%PDF-"
+    texto = "\n".join(p.extract_text() for p in PdfReader(str(caminho)).pages)
+    assert "Linha um do PDF" in texto
+    assert "coração" in texto
+
+
+def test_criar_arquivo_pdf_nao_sobrescreve(tmp_path):
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    alvo = tmp_path / "o" / "resumo.pdf"
+    alvo.parent.mkdir(parents=True)
+    alvo.write_bytes(b"%PDF-1.4 antigo")
+    ok = sessao._executar("criar_arquivo", {
+        "destino": str(alvo), "texto": "novo pdf"})
+    assert ok["ok"] is True and Path(ok["destino"]).name == "resumo (1).pdf"
+    assert alvo.read_bytes() == b"%PDF-1.4 antigo"
+
+
+def test_criar_arquivo_extensao_nao_suportada(tmp_path):
+    sessao, _ = _sessao(tmp_path)
+    r = sessao._executar("criar_arquivo", {
+        "destino": str(tmp_path / "o" / "script.exe"), "texto": "x"})
+    assert r["ok"] is False and "não suportada" in r["erro"]
+
+
+def test_mover_destino_em_entrada_e_recusado(tmp_path):
+    """entrada/ e somente leitura: destino tem que estar em organizados/."""
+    sessao, _ = _sessao(tmp_path)
+    entrada = tmp_path / "e"
+    entrada.mkdir()
+    arquivo = entrada / "nota.txt"
+    arquivo.write_text("conteudo", encoding="utf-8")
+    r = sessao._executar("mover_arquivo", {
+        "origem": str(arquivo), "destino": str(entrada / "sub" / "nota.txt")})
+    assert r["ok"] is False
+    assert arquivo.is_file()
+
+
+def test_mover_origem_excluida_e_bloqueado(tmp_path):
+    sessao, _ = _sessao(tmp_path)
+    organizados = tmp_path / "o" / "Pessoal"
+    organizados.mkdir(parents=True)
+    senhas = organizados / "senhas.txt"
+    senhas.write_text("nao deveria sair daqui", encoding="utf-8")
+    r = sessao._executar("mover_arquivo", {
+        "origem": str(senhas), "destino": str(tmp_path / "o" / "Outros" / "senhas.txt")})
+    assert r["ok"] is False and "exclusão" in r["erro"]
+    assert senhas.is_file()
+
+
+def test_mover_em_lote_destino_em_entrada_e_recusado(tmp_path):
+    sessao, _ = _sessao(tmp_path)
+    entrada = tmp_path / "e"
+    entrada.mkdir()
+    a = entrada / "a.txt"
+    a.write_text("a", encoding="utf-8")
+    b = entrada / "b.txt"
+    b.write_text("b", encoding="utf-8")
+    r = sessao._executar("mover_em_lote", {"movimentos": [
+        {"origem": str(a), "destino": str(entrada / "x" / "a.txt")},
+        {"origem": str(b), "destino": str(tmp_path / "o" / "b.txt")},
+    ]})
+    # o invalido e recusado; o valido pode seguir apenas se confirmado
+    assert r.get("erros") and r["erros"][0]["posicao"] == 0
+    assert a.is_file()
+
+
+def test_criar_arquivo_aceita_prefixo_organizados(tmp_path):
+    """A IA costuma mandar 'organizados/x.pdf': o prefixo e removido."""
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    ok = sessao._executar("criar_arquivo", {
+        "destino": "organizados/lista_de_compras.pdf",
+        "texto": "Lista ficticia\n- arroz\n- feijao"})
+    assert ok["ok"] is True
+    caminho = Path(ok["destino"])
+    assert caminho.parent == (tmp_path / "o")
+    assert caminho.name == "lista_de_compras.pdf"
+    assert caminho.read_bytes()[:5] == b"%PDF-"
+
+
+def test_criar_arquivo_aceita_prefixo_com_barra_invertida(tmp_path):
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    ok = sessao._executar("criar_arquivo", {
+        "destino": "organizados\\Textos\\nota.txt", "texto": "oi"})
+    assert ok["ok"] is True
+    assert Path(ok["destino"]) == tmp_path / "o" / "Textos" / "nota.txt"
+
+
+def test_criar_pasta_aceita_prefixo_organizados(tmp_path):
+    sessao, _ = _sessao(tmp_path, confirmar=lambda *a: True)
+    ok = sessao._executar("criar_pasta", {"caminho": "organizados/Projetos"})
+    assert ok["ok"] is True
+    assert (tmp_path / "o" / "Projetos").is_dir()
+
+
+def test_caminho_fora_da_raiz_continua_recusado(tmp_path):
+    sessao, _ = _sessao(tmp_path)
+    (tmp_path / "o").mkdir()
+    r = sessao._executar("criar_arquivo", {
+        "destino": "../fora.txt", "texto": "x"})
+    assert r["ok"] is False and "raiz desta sessão" in r["erro"]
+
+
 def test_rodada_final_forca_resposta_texto(tmp_path):
     pedidos = []
     ferramenta = json.dumps({"tool": "listar_arquivos", "args": {}})

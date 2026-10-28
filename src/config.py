@@ -1,13 +1,17 @@
 """Fase 2: pastas, limites, categorias fixas e mapa extensao -> categoria."""
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# .env primeiro, para que IA_BASE_URL/IA_MODELOS sejam lidos aqui embaixo.
-load_dotenv()
+# Congelado (PyInstaller): dados ficam ao lado do .exe, nunca em _MEIPASS nem no cwd.
+BASE_DIR = (Path(sys.executable).resolve().parent
+            if getattr(sys, "frozen", False)
+            else Path(__file__).resolve().parent.parent)
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# .env primeiro (da pasta do programa, nao do cwd), para IA_BASE_URL/IA_MODELOS.
+load_dotenv(BASE_DIR / ".env")
 
 ENTRADA_DIR = BASE_DIR / "entrada"
 ORGANIZADOS_DIR = BASE_DIR / "organizados"
@@ -31,13 +35,32 @@ INTERVALO_IA_SEG = 5.0
 LEITURA_COMPLETA_MAX_CHARS = 8000
 
 # Chat: rotação rápida (1 tentativa por modelo, timeout curto).
-CHAT_TIMEOUT_SEG = 10.0
+# 30s: gateway medido em 5-9s mesmo para pings; 10s do colega estourava -> "API ocupada".
+CHAT_TIMEOUT_SEG = 30.0
 CHAT_ESPERA_MODELOS = 4.0
 
 # IA: endpoint no formato Anthropic (/v1/messages). Padrao: GLM (z.ai) gratuito.
 # Via .env aponta para Claude: IA_BASE_URL oficial https://api.anthropic.com
 # ou um gateway ex.: https://gpt.teamsoclo.site ; IA_MODELOS=nome1,nome2 (rotatividade).
-IA_BASE_URL = os.getenv("IA_BASE_URL") or "https://api.z.ai/api/anthropic"
+# Seguranca: so https (a chave nunca pode trafegar em claro) e host avisado.
+_IA_BASE_URL_PADRAO = "https://api.z.ai/api/anthropic"
+_HOSTS_IA_CONHECIDOS = ("api.z.ai", "api.anthropic.com", "gpt.teamsoclo.site")
+
+def _base_url_ia():
+    url = (os.getenv("IA_BASE_URL") or _IA_BASE_URL_PADRAO).strip()
+    if not url.lower().startswith("https://"):
+        raise ValueError(
+            f"IA_BASE_URL invalida ({url!r}): use https:// para a chave nao "
+            "trafegar em claro")
+    host = url.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0].lower()
+    if host not in _HOSTS_IA_CONHECIDOS:
+        import sys
+        print(f"[aviso] IA_BASE_URL aponta para host nao habitual ({host}): "
+              "a chave e o texto do prompt sao enviados a esse servidor",
+              file=sys.stderr)
+    return url
+
+IA_BASE_URL = _base_url_ia()
 
 def _modelos_da_ia():
     """IA_MODELOS do .env (separada por virgula) ou os Flash do GLM gratuito."""

@@ -4,6 +4,7 @@ dados/
 logs/
 __pycache__/
 *.db
+postman/
 entrada/*
 !entrada/.gitkeep
 organizados/*

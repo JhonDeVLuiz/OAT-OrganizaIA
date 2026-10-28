@@ -3,7 +3,7 @@
 ## Setup
 - Windows + PowerShell. Never use `&&` (not valid here); chain with `;`.
 - Always use the venv python: `.\.venv\Scripts\python.exe`
-- Install: `.\.venv\Scripts\python.exe -m pip install watchdog pypdf python-docx openpyxl python-dotenv pytest google-genai`
+- Install: `.\.venv\Scripts\python.exe -m pip install watchdog pypdf python-docx openpyxl python-dotenv pytest google-genai fpdf2`
 - Freeze after dep changes: `.\.venv\Scripts\python.exe -m pip freeze | Set-Content -Encoding ascii requirements.txt` (`>` writes UTF-16 in PowerShell; use the pipe above)
 - Tests: `.\.venv\Scripts\python.exe -m pytest` / single file: `.\.venv\Scripts\python.exe -m pytest tests/test_seguranca.py -v`
 - No `pyproject.toml` / pytest ini / CI / lint config. No `opencode.json`.

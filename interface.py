@@ -17,6 +17,8 @@ class Interface(tk.Tk):
         self.pasta=tk.StringVar(value=str(config.ENTRADA_DIR)); self.modo=tk.StringVar(value='ia')
         self.regras=[tk.BooleanVar(value=True),tk.BooleanVar(value=True),tk.BooleanVar(value=False)]
         self.status=tk.StringVar(value='Pronto para organizar')
+        self.arquivos=[]  # arquivos escolhidos no seletor de arquivos (modo alternativo a pasta)
+        self.pct=0.0      # progresso 0..1 da barra (porcentagem mostrada dentro dela)
         self.sessao=None; self.ocupado=False
         self._montar()
 
@@ -24,7 +26,8 @@ class Interface(tk.Tk):
         return tk.Label(parent,text=text,font=('Segoe UI',size,'bold' if bold else 'normal'),bg=parent['bg'],fg=color,**kw)
 
     def botao(self,parent,text,command,bg=BLUE,fg='white',**kw):
-        return tk.Button(parent,text=text,command=command,bg=bg,fg=fg,activebackground=bg,activeforeground=fg,relief='flat',bd=0,font=('Segoe UI',10,'bold'),cursor='hand2',padx=13,pady=10,**kw)
+        padx=kw.pop('padx',13); pady=kw.pop('pady',10)
+        return tk.Button(parent,text=text,command=command,bg=bg,fg=fg,activebackground=bg,activeforeground=fg,relief='flat',bd=0,font=('Segoe UI',10,'bold'),cursor='hand2',padx=padx,pady=pady,**kw)
 
     def painel(self,parent):
         f=tk.Frame(parent,bg=PANEL,highlightbackground=BORDER,highlightthickness=1)
@@ -42,9 +45,17 @@ class Interface(tk.Tk):
 
         sec=self.painel(esq); sec.pack(fill='x',pady=(0,10))
         self.label(sec,'Selecione o que deseja organizar',11,True).pack(anchor='w',padx=14,pady=(12,7))
-        linha=tk.Frame(sec,bg=PANEL); linha.pack(fill='x',padx=12,pady=(0,12))
+        linha=tk.Frame(sec,bg=PANEL); linha.pack(fill='x',padx=12,pady=(0,8))
         tk.Entry(linha,textvariable=self.pasta,bg=BG,fg=TEXT,insertbackground=TEXT,relief='flat',font=('Segoe UI',10)).pack(side='left',fill='x',expand=True,ipady=9,padx=(0,7))
-        self.botao(linha,'Buscar Pasta',self._buscar).pack(side='right')
+        botoes=tk.Frame(sec,bg=PANEL); botoes.pack(fill='x',padx=12,pady=(0,4))
+        self.botao(botoes,'Buscar Pasta',self._buscar).pack(side='left')
+        self.botao(botoes,'Buscar Arquivos',self._buscar_arquivos).pack(side='left',padx=(8,0))
+        linha_arq=tk.Frame(sec,bg=PANEL); linha_arq.pack(fill='x',padx=12,pady=(0,12))
+        self.rotulo_arquivos=tk.StringVar(value='Nenhum arquivo selecionado (organiza a pasta inteira)')
+        self.label(linha_arq,'',9,color=MUTED,textvariable=self.rotulo_arquivos,
+                   wraplength=330,justify='left').pack(side='left',fill='x',expand=True)
+        self.botao(linha_arq,'Limpar',self._limpar_arquivos,bg=PANEL2,fg=TEXT,
+                   padx=9,pady=4).pack(side='right')
 
         sec=self.painel(esq); sec.pack(fill='x',pady=(0,10))
         self.label(sec,'Modo de Organização',11,True).pack(anchor='w',padx=14,pady=(12,7))
@@ -57,7 +68,7 @@ class Interface(tk.Tk):
         for var,texto in zip(self.regras,['Criar subpastas por data/mês','Agrupar por contexto do arquivo','Agrupar por contexto da data']):
             tk.Checkbutton(sec,text=texto,variable=var,bg=PANEL,fg=TEXT,selectcolor=BG,activebackground=PANEL,activeforeground=TEXT,font=('Segoe UI',10),anchor='w').pack(fill='x',padx=14,pady=3)
         self.botao(sec,'ϟ  ORGANIZAR AGORA',self._organizar,bg=GREEN,fg='#05291e').pack(fill='x',padx=13,pady=(22,12))
-        self.progresso=tk.Canvas(sec,height=7,bg=BORDER,highlightthickness=0)
+        self.progresso=tk.Canvas(sec,height=18,bg=BORDER,highlightthickness=0)
         self.progresso.pack(fill='x',padx=14,pady=(0,9)); self.progresso.bind('<Configure>',self._barra)
         self.label(sec,'',9,color=MUTED,textvariable=self.status).pack(pady=(0,12))
 
@@ -80,12 +91,12 @@ class Interface(tk.Tk):
         self.entrada=tk.Entry(envio,bg=BG,fg=TEXT,insertbackground=TEXT,relief='flat',font=('Segoe UI',10))
         self.entrada.pack(side='left',fill='x',expand=True,ipady=12,padx=(0,7))
         self.entrada.bind('<Return>',lambda e:self._enviar())
-        self.botao(envio,'Enviar',self._enviar).pack(side='right')
+        self.botao(envio,'Enviar',self._enviar,bg=GREEN,fg='#05291e').pack(side='right')
 
         self.historico=tk.Text(direita,bg=BG,fg=TEXT,wrap='word',state='disabled',relief='flat',font=('Segoe UI',11),padx=14,pady=14,spacing3=12)
         self.historico.pack(side='top',fill='both',expand=True,padx=10,pady=10)
         self.historico.tag_configure('bot',foreground='#b5d9ff'); self.historico.tag_configure('user',foreground='#d8fce9')
-        self._mensagem('bot','Olá! Selecione uma pasta ao lado, configure sua API Key e me diga como quer organizar seus arquivos.')
+        self._mensagem('bot','Olá! Escolha uma pasta ou alguns arquivos ao lado, configure sua API Key e me diga como quer organizar seus arquivos.')
         self.label(self,'API: configure GLM_API_KEY no ambiente ou arquivo .env',9,color=MUTED).pack(anchor='e',padx=23,pady=(0,8))
 
     def _log(self,texto):
@@ -98,13 +109,53 @@ class Interface(tk.Tk):
         if linhas>500:self.log.delete('1.0',f'{linhas-500}.0')
         self.log.configure(state='disabled');self.log.see('end')
 
+    def _progresso(self,pct,texto=None):
+        """Atualiza barra determinada: preenchimento + '40% — Pesquisando: ...'."""
+        self.pct=max(0.0,min(1.0,pct))
+        if texto is not None:
+            self.status.set(f'{int(round(self.pct*100))}% — {texto}')
+        self._barra()
+
     def _barra(self,event=None):
-        self.progresso.delete('all'); w=self.progresso.winfo_width()
-        self.progresso.create_rectangle(0,0,w*(0.85 if self.ocupado else 0),7,fill=BLUE,outline='')
+        w=self.progresso.winfo_width()
+        self.progresso.delete('all')
+        cor=BLUE if self.pct>=1 else GREEN
+        if self.pct>0:
+            self.progresso.create_rectangle(0,0,max(3,w*self.pct),18,fill=cor,outline='')
+        if w>40:
+            texto=self.status.get() if self.ocupado else 'Pronto'
+            self.progresso.create_text(w/2,9,text=texto,fill=TEXT,
+                                       font=('Segoe UI',9,'bold'))
+
+    def _zerar_barra(self):
+        if not self.ocupado:
+            self.pct=0.0; self.status.set('Pronto'); self._barra()
 
     def _buscar(self):
         pasta=filedialog.askdirectory(initialdir=self.pasta.get() if Path(self.pasta.get()).is_dir() else str(Path.home()))
         if pasta:self.pasta.set(pasta);self.sessao=None
+
+    def _buscar_arquivos(self):
+        """Seletor de arquivos (multipla escolha): organiza so os escolhidos."""
+        inicial=self.pasta.get() if Path(self.pasta.get()).is_dir() else str(Path.home())
+        escolhidos=filedialog.askopenfilenames(title='Selecione os arquivos para organizar',initialdir=inicial)
+        if not escolhidos:return
+        self.arquivos=[Path(c) for c in escolhidos]
+        self._atualizar_rotulo_arquivos()
+        self._log(f'{len(self.arquivos)} arquivo(s) selecionado(s)')
+
+    def _limpar_arquivos(self):
+        self.arquivos=[]
+        self._atualizar_rotulo_arquivos()
+        self._log('Seleção de arquivos limpa (modo pasta)')
+
+    def _atualizar_rotulo_arquivos(self):
+        if not self.arquivos:
+            self.rotulo_arquivos.set('Nenhum arquivo selecionado (organiza a pasta inteira)')
+            return
+        nomes=', '.join(a.name for a in self.arquivos[:4])
+        extra=f' ... +{len(self.arquivos)-4}' if len(self.arquivos)>4 else ''
+        self.rotulo_arquivos.set(f'{len(self.arquivos)} arquivo(s): {nomes}{extra}')
 
     def _mensagem(self,autor,conteudo):
         self.historico.configure(state='normal')
@@ -114,7 +165,7 @@ class Interface(tk.Tk):
 
     def _rodar(self,func):
         if self.ocupado:return
-        self.ocupado=True;self._barra()
+        self.ocupado=True; self.pct=0.0; self._barra()
         def job():
             try: func()
             except Exception as exc:self.after(0,lambda msg=str(exc):self._mensagem('bot','Erro: '+msg))
@@ -122,23 +173,93 @@ class Interface(tk.Tk):
         threading.Thread(target=job,daemon=True).start()
 
     def _terminar(self):
-        self.ocupado=False;self._barra()
+        self.ocupado=False
+        self.pct=1.0; self.status.set('100% — Concluído'); self._barra()
+        self.after(1500,self._zerar_barra)
 
     def _organizar(self):
+        if self.arquivos:
+            self._organizar_arquivos()
+            return
         pasta=Path(self.pasta.get()).expanduser()
         if not pasta.is_dir():messagebox.showerror('Pasta inválida','Selecione uma pasta existente.');return
         destino=pasta/'OrganizaIA_Organizados'
         if not messagebox.askyesno('Confirmar organização',f'Organizar os arquivos de:\n{pasta}\n\nDestino: {destino}\n\nOs arquivos serão movidos. Deseja continuar?'):return
+        try:
+            total=sum(1 for f in pasta.iterdir() if f.is_file())
+        except OSError:
+            total=0
         def job():
-            self.after(0,lambda:(self.status.set('Organizando arquivos...'),self._log('Organização iniciada')))
+            self.after(0,self._progresso,0.0,'Organizando arquivos...')
+            feitos=[0]
+            def aviso(texto):
+                if texto.startswith('processando') and total:
+                    feitos[0]+=1
+                    nome=texto[len('processando'):].strip().rstrip('.')
+                    self.after(0,self._progresso,min(1.0,feitos[0]/total),f'Pesquisando: {nome}')
+                self.after(0,self._log,texto)
             resultado=organizador.processar(entrada=pasta,organizados=destino,
-                                            modo=self.modo.get(),
-                                            avisar=lambda texto:self.after(0,self._log,texto))
+                                            modo=self.modo.get(),avisar=aviso)
             movidos=len(resultado.get('movimentos',[]));ignorados=len(resultado.get('ignorados',[]))
             msg=f'Organização concluída: {movidos} arquivos processados; {ignorados} ignorados.'
             self.after(0,lambda:(self.status.set(msg),self._mensagem('bot',msg),
                                  self._log(f'Organização concluída: {movidos} processados, {ignorados} ignorados')))
         self._rodar(job)
+
+    def _organizar_arquivos(self):
+        """Organiza somente os arquivos escolhidos no seletor (confirma antes)."""
+        arquivos=list(self.arquivos)
+        pasta=Path(self.pasta.get()).expanduser()
+        base=pasta if pasta.is_dir() else arquivos[0].parent
+        destino=base/'OrganizaIA_Organizados'
+        lista='\n'.join(f'• {a.name}' for a in arquivos[:10])
+        extra=f'\n… e mais {len(arquivos)-10}' if len(arquivos)>10 else ''
+        origens=sorted({str(a.parent) for a in arquivos})
+        origem_txt=origens[0] if len(origens)==1 else f'{len(origens)} pastas de origem'
+        if not messagebox.askyesno(
+                'Confirmar organização',
+                f'Organizar estes {len(arquivos)} arquivo(s)?\n\n{lista}{extra}\n\n'
+                f'Origem: {origem_txt}\nDestino: {destino}\n\n'
+                'Os arquivos serão movidos. Deseja continuar?'):
+            return
+        def job():
+            self.after(0,self._progresso,0.0,'Organizando arquivos selecionados...')
+            self.after(0,self._log,f'Organização de {len(arquivos)} arquivo(s) selecionado(s) iniciada')
+            aviso=lambda texto:self.after(0,self._log,texto)
+            movidos=ignorados=0
+            for i,caminho in enumerate(arquivos):
+                self.after(0,self._progresso,(i+1)/len(arquivos),f'Pesquisando: {caminho.name}')
+                try:
+                    resultado=organizador.processar_um(caminho,entrada=caminho.parent,
+                                                       organizados=destino,
+                                                       modo=self.modo.get(),avisar=aviso)
+                    if resultado['movimentos'] and resultado['movimentos'][0]['status']=='ignorado':
+                        ignorados+=1
+                    else:
+                        movidos+=1
+                except Exception as exc:
+                    ignorados+=1
+                    aviso(f'falha em {caminho.name}: {exc}')
+            msg=f'Organização concluída: {movidos} arquivos processados; {ignorados} ignorados.'
+            self.after(0,lambda:(self.status.set(msg),self._mensagem('bot',msg),
+                                 self._log(f'Organização concluída: {movidos} processados, {ignorados} ignorados'),
+                                 self.arquivos.clear(),self._atualizar_rotulo_arquivos()))
+        self._rodar(job)
+
+    def _aviso_chat(self,texto):
+        """Log + progresso do chat: rodada 1/6 -> %, modelo em uso, ferramenta."""
+        self._log(texto)
+        import re
+        m=re.search(r'rodada (\d+)/(\d+)',texto)
+        if m:
+            r,total=int(m.group(1)),int(m.group(2))
+            self._progresso((r-1)/max(total,1),f'Pesquisando (rodada {r}/{total})')
+        elif texto.startswith('chamando o modelo'):
+            modelo=texto[len('chamando o modelo'):].strip().rstrip('.')
+            self._progresso(self.pct,f'Pesquisando com {modelo}')
+        elif texto.startswith('executando'):
+            ferramenta=texto[len('executando'):].strip().rstrip('.')
+            self._progresso(self.pct,f'Executando {ferramenta}')
 
     def _enviar(self):
         pergunta=self.entrada.get().strip()
@@ -151,7 +272,7 @@ class Interface(tk.Tk):
                 self._log('Chat iniciado (IA configurada com GLM_API_KEY/.env)')
                 self.sessao=ChatSession(entrada=pasta,organizados=pasta/'OrganizaIA_Organizados',
                                         confirmar=self._confirmar_chat,
-                                        avisar=lambda texto:self.after(0,self._log,texto))
+                                        avisar=lambda texto:self.after(0,self._aviso_chat,texto))
             resposta=self.sessao.responder(pergunta)
             self.after(0,lambda:self._mensagem('bot',resposta))
         self._rodar(job)
