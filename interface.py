@@ -1,104 +1,276 @@
 """Interface desktop do OrganizaIA. Execute: python interface.py"""
-import os
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
+
+try:
+    import customtkinter as ctk
+except ImportError:  # pragma: no cover - ambiente sem a dependencia
+    raise SystemExit(
+        "customtkinter nao instalado. Rode: "
+        r".\.venv\Scripts\python.exe -m pip install customtkinter")
+
 from src import config, organizador
 from src.chat import ChatSession
+from src.classificador import chave_glm
 
-BG='#0b1423'; PANEL='#172538'; PANEL2='#213247'; BORDER='#34465b'; TEXT='#f2f6fc'; MUTED='#a7b8cb'; BLUE='#237ac5'; GREEN='#06db89'
+# Tokens de design — cada cor e uma tupla (claro, escuro)
+BG = ('#F4F7FA', '#08090B')            # fundo do app
+CARD = ('#FFFFFF', '#111216')          # superficie dos cards
+INPUT = ('#EFF3F8', '#0B0C0F')         # campos de entrada
+BORDER = ('#D6E0EB', '#1E293B')        # borda sutil
+BORDER_SOFT = ('#E3EAF2', '#26282E')   # divisores e controles
+TEXT = ('#0F172A', '#F8FAFC')
+MUTED = ('#5C6B80', '#94A3B8')
+SUCCESS = ('#15803D', '#22C55E')
+WARNING = ('#B45309', '#F59E0B')
+FONTE = 'Segoe UI'
+# Botoes verdes (esmeralda)
+EMERALD = ('#05B98A', '#06D6A0')
+EMERALD_MID = ('#0AA47C', '#0BB98A')
+EMERALD_HOVER = ('#0FD3A3', '#2EE6B6')
+EMERALD_INK = '#032B22'
+# Segmentado (modo de organizacao e tema)
+SEG_SEL = ('#A7F3DE', '#0A7F61')
+SEG_SEL_HOVER = ('#8FE9D0', '#0E9F7A')
+SEG_OFF = ('#E8F7F1', '#10231D')
+SEG_OFF_HOVER = ('#DCF2EA', '#163027')
+# Balao do usuario no chat
+USER_BALAO = ('#CCFBEF', '#0A7F61')
+USER_BORDA = ('#A7F3DE', '#0E9F7A')
+USER_AUTOR = ('#0A7F61', '#D1FAE5')
 
-class Interface(tk.Tk):
+MODOS = {'ia': '✧  Organização Inteligente (IA)', 'tipo': '▤  Por Tipo de Arquivo'}
+
+
+class Interface(ctk.CTk):
     def __init__(self):
-        super().__init__()
+        ctk.set_appearance_mode('dark')
+        super().__init__(fg_color=BG)
         self.title('OrganizaIA — Organizador de Documentos e Pastas')
-        self.geometry('1050x650'); self.minsize(850,540); self.configure(bg=BG)
+        self.geometry('1180x800'); self.minsize(1000,740)
         self.pasta=tk.StringVar(value=str(config.ENTRADA_DIR)); self.modo=tk.StringVar(value='ia')
         self.regras=[tk.BooleanVar(value=True),tk.BooleanVar(value=True),tk.BooleanVar(value=False)]
         self.status=tk.StringVar(value='Pronto para organizar')
         self.arquivos=[]  # arquivos escolhidos no seletor de arquivos (modo alternativo a pasta)
-        self.pct=0.0      # progresso 0..1 da barra (porcentagem mostrada dentro dela)
+        self.pct=0.0      # progresso 0..1 da barra (porcentagem mostrada no status)
         self.sessao=None; self.ocupado=False
+        self._balaos=[]        # (linha, label) das mensagens do chat
+        self._wrap_after=None  # debounce do recalculo de quebra de linha
         self._montar()
 
-    def label(self,parent,text,size=11,bold=False,color=TEXT,**kw):
-        return tk.Label(parent,text=text,font=('Segoe UI',size,'bold' if bold else 'normal'),bg=parent['bg'],fg=color,**kw)
+    # ---------- componentes ----------
+    def _card(self,parent):
+        return ctk.CTkFrame(parent,fg_color=CARD,corner_radius=12,
+                            border_width=1,border_color=BORDER)
 
-    def botao(self,parent,text,command,bg=BLUE,fg='white',**kw):
-        padx=kw.pop('padx',13); pady=kw.pop('pady',10)
-        return tk.Button(parent,text=text,command=command,bg=bg,fg=fg,activebackground=bg,activeforeground=fg,relief='flat',bd=0,font=('Segoe UI',10,'bold'),cursor='hand2',padx=padx,pady=pady,**kw)
+    def _titulo_card(self,parent,texto):
+        ctk.CTkLabel(parent,text=texto,font=(FONTE,12,'bold'),text_color=TEXT,
+                     anchor='w').pack(fill='x',padx=16,pady=(14,10))
 
-    def painel(self,parent):
-        f=tk.Frame(parent,bg=PANEL,highlightbackground=BORDER,highlightthickness=1)
-        return f
+    def _botao(self,parent,text,command,**kw):
+        return ctk.CTkButton(parent,text=text,command=command,
+                             height=kw.pop('height',36),
+                             corner_radius=kw.pop('corner_radius',8),
+                             font=kw.pop('font',(FONTE,11,'bold')),**kw)
 
     def _montar(self):
-        topo=tk.Frame(self,bg=BG); topo.pack(fill='x',padx=22,pady=(18,12))
-        self.label(topo,'🤖  OrganizaIA',23,True).pack(anchor='w')
-        self.label(topo,'Organizador de Documentos e Pastas com IA',10,color=MUTED).pack(anchor='w')
-        corpo=tk.Frame(self,bg=BG); corpo.pack(fill='both',expand=True,padx=22,pady=(0,20))
-        corpo.grid_columnconfigure(0,weight=1); corpo.grid_columnconfigure(1,weight=1)
+        # ---------- cabecalho ----------
+        topo=ctk.CTkFrame(self,fg_color='transparent')
+        topo.pack(fill='x',padx=24,pady=(18,12))
+        marca=ctk.CTkFrame(topo,fg_color=CARD,corner_radius=12,
+                           border_width=1,border_color=BORDER_SOFT,width=44,height=44)
+        marca.pack(side='left'); marca.pack_propagate(False)
+        ctk.CTkLabel(marca,text='🤖',font=(FONTE,20)).pack(expand=True)
+        textos=ctk.CTkFrame(topo,fg_color='transparent')
+        textos.pack(side='left',padx=(12,0))
+        ctk.CTkLabel(textos,text='OrganizaIA',font=(FONTE,22,'bold'),
+                     text_color=TEXT).pack(anchor='w')
+        ctk.CTkLabel(textos,text='Organizador de Documentos e Pastas com IA',
+                     font=(FONTE,11),text_color=MUTED).pack(anchor='w')
+        self.badge=ctk.CTkFrame(topo,fg_color=CARD,corner_radius=14,
+                                border_width=1,border_color=BORDER_SOFT)
+        self.badge.pack(side='right',pady=4)
+        self.badge_dot=ctk.CTkLabel(self.badge,text='●',font=(FONTE,13),
+                                    text_color=SUCCESS,width=16)
+        self.badge_dot.pack(side='left',padx=(10,2),pady=6)
+        self.badge_txt=ctk.CTkLabel(self.badge,text='',font=(FONTE,10,'bold'),
+                                    text_color=MUTED)
+        self.badge_txt.pack(side='left',padx=(0,12),pady=6)
+        self._atualizar_badge()
+        self.tema=tk.StringVar(value='🌙  Escuro')
+        self.seletor_tema=ctk.CTkSegmentedButton(
+            topo,values=['☀  Claro','🌙  Escuro'],variable=self.tema,
+            command=self._mudar_tema,height=32,corner_radius=8,border_width=0,
+            width=170,fg_color=INPUT,selected_color=SEG_SEL,
+            selected_hover_color=SEG_SEL_HOVER,unselected_color=SEG_OFF,
+            unselected_hover_color=SEG_OFF_HOVER,text_color=TEXT,
+            font=(FONTE,10,'bold'),dynamic_resizing=False)
+        self.seletor_tema.pack(side='right',padx=(0,10),pady=4)
+
+        # ---------- corpo em 2 colunas ----------
+        corpo=ctk.CTkFrame(self,fg_color='transparent')
+        corpo.pack(fill='both',expand=True,padx=24,pady=(0,16))
+        corpo.grid_columnconfigure(0,weight=1,uniform='col')
+        corpo.grid_columnconfigure(1,weight=1,uniform='col')
         corpo.grid_rowconfigure(0,weight=1)
-        esq=tk.Frame(corpo,bg=BG); esq.grid(row=0,column=0,sticky='nsew',padx=(0,7))
-        direita=self.painel(corpo); direita.grid(row=0,column=1,sticky='nsew',padx=(7,0))
 
-        sec=self.painel(esq); sec.pack(fill='x',pady=(0,10))
-        self.label(sec,'Selecione o que deseja organizar',11,True).pack(anchor='w',padx=14,pady=(12,7))
-        linha=tk.Frame(sec,bg=PANEL); linha.pack(fill='x',padx=12,pady=(0,8))
-        tk.Entry(linha,textvariable=self.pasta,bg=BG,fg=TEXT,insertbackground=TEXT,relief='flat',font=('Segoe UI',10)).pack(side='left',fill='x',expand=True,ipady=9,padx=(0,7))
-        botoes=tk.Frame(sec,bg=PANEL); botoes.pack(fill='x',padx=12,pady=(0,4))
-        self.botao(botoes,'Buscar Pasta',self._buscar).pack(side='left')
-        self.botao(botoes,'Buscar Arquivos',self._buscar_arquivos).pack(side='left',padx=(8,0))
-        linha_arq=tk.Frame(sec,bg=PANEL); linha_arq.pack(fill='x',padx=12,pady=(0,12))
+        esq=ctk.CTkFrame(corpo,fg_color='transparent')
+        esq.grid(row=0,column=0,sticky='nsew',padx=(0,7))
+        esq.grid_columnconfigure(0,weight=1)
+        esq.grid_rowconfigure(3,weight=1)
+        direita=self._card(corpo)
+        direita.grid(row=0,column=1,sticky='nsew',padx=(7,0))
+
+        # ---------- card 1: selecao ----------
+        sec=self._card(esq)
+        sec.grid(row=0,column=0,sticky='ew',pady=(0,8))
+        self._titulo_card(sec,'Selecione o que deseja organizar')
+        linha=ctk.CTkFrame(sec,fg_color='transparent')
+        linha.pack(fill='x',padx=14)
+        self.campo_pasta=ctk.CTkEntry(linha,textvariable=self.pasta,height=40,
+                                      corner_radius=8,fg_color=INPUT,border_width=1,
+                                      border_color=BORDER,text_color=TEXT,
+                                      font=(FONTE,11))
+        self.campo_pasta.pack(fill='x')
+        botoes=ctk.CTkFrame(sec,fg_color='transparent')
+        botoes.pack(fill='x',padx=14,pady=(10,8))
+        self._botao(botoes,'Buscar Pasta',self._buscar,fg_color=EMERALD,
+                    hover_color=EMERALD_HOVER,text_color=EMERALD_INK).pack(side='left')
+        self._botao(botoes,'Buscar Arquivos',self._buscar_arquivos,fg_color=EMERALD_MID,
+                    hover_color=EMERALD_HOVER,
+                    text_color=EMERALD_INK).pack(side='left',padx=(8,0))
+        linha_arq=ctk.CTkFrame(sec,fg_color='transparent')
+        linha_arq.pack(fill='x',padx=14,pady=(0,14))
         self.rotulo_arquivos=tk.StringVar(value='Nenhum arquivo selecionado (organiza a pasta inteira)')
-        self.label(linha_arq,'',9,color=MUTED,textvariable=self.rotulo_arquivos,
-                   wraplength=330,justify='left').pack(side='left',fill='x',expand=True)
-        self.botao(linha_arq,'Limpar',self._limpar_arquivos,bg=PANEL2,fg=TEXT,
-                   padx=9,pady=4).pack(side='right')
+        ctk.CTkLabel(linha_arq,textvariable=self.rotulo_arquivos,font=(FONTE,9),
+                     text_color=MUTED,anchor='w',justify='left',
+                     wraplength=330).pack(side='left',fill='x',expand=True)
+        self._botao(linha_arq,'Limpar',self._limpar_arquivos,fg_color=EMERALD_MID,
+                    hover_color=EMERALD_HOVER,text_color=EMERALD_INK,width=62,height=28,
+                    font=(FONTE,10)).pack(side='right')
 
-        sec=self.painel(esq); sec.pack(fill='x',pady=(0,10))
-        self.label(sec,'Modo de Organização',11,True).pack(anchor='w',padx=14,pady=(12,7))
-        linha=tk.Frame(sec,bg=PANEL); linha.pack(fill='x',padx=12,pady=(0,12))
-        for value,texto in [('ia','✧  Organização Inteligente (IA)'),('tipo','▤  Por Tipo de Arquivo')]:
-            tk.Radiobutton(linha,text=texto,variable=self.modo,value=value,bg=PANEL,fg=TEXT,selectcolor=BG,activebackground=PANEL,activeforeground=TEXT,font=('Segoe UI',10),indicatoron=True).pack(side='left',padx=(0,10))
+        # ---------- card 2: modo ----------
+        sec=self._card(esq)
+        sec.grid(row=1,column=0,sticky='ew',pady=(0,8))
+        self._titulo_card(sec,'Modo de Organização')
+        self.modo_exibicao=tk.StringVar(value=MODOS['ia'])
+        ctk.CTkSegmentedButton(
+            sec,values=[MODOS['ia'],MODOS['tipo']],variable=self.modo_exibicao,
+            command=self._mudar_modo,height=38,corner_radius=8,border_width=0,
+            fg_color=INPUT,selected_color=SEG_SEL,selected_hover_color=SEG_SEL_HOVER,
+            unselected_color=SEG_OFF,unselected_hover_color=SEG_OFF_HOVER,
+            text_color=TEXT,font=(FONTE,10,'bold'),
+            dynamic_resizing=False).pack(fill='x',padx=14,pady=(0,14))
 
-        sec=self.painel(esq); sec.pack(fill='both',expand=True)
-        self.label(sec,'Regras automáticas',11,True).pack(anchor='w',padx=14,pady=(14,10))
-        for var,texto in zip(self.regras,['Criar subpastas por data/mês','Agrupar por contexto do arquivo','Agrupar por contexto da data']):
-            tk.Checkbutton(sec,text=texto,variable=var,bg=PANEL,fg=TEXT,selectcolor=BG,activebackground=PANEL,activeforeground=TEXT,font=('Segoe UI',10),anchor='w').pack(fill='x',padx=14,pady=3)
-        self.botao(sec,'ϟ  ORGANIZAR AGORA',self._organizar,bg=GREEN,fg='#05291e').pack(fill='x',padx=13,pady=(22,12))
-        self.progresso=tk.Canvas(sec,height=18,bg=BORDER,highlightthickness=0)
-        self.progresso.pack(fill='x',padx=14,pady=(0,9)); self.progresso.bind('<Configure>',self._barra)
-        self.label(sec,'',9,color=MUTED,textvariable=self.status).pack(pady=(0,12))
+        # ---------- card 3: regras + acao ----------
+        sec=self._card(esq)
+        sec.grid(row=2,column=0,sticky='ew')
+        self._titulo_card(sec,'Regras automáticas')
+        for var,texto in zip(self.regras,['Criar subpastas por data/mês',
+                                          'Agrupar por contexto do arquivo',
+                                          'Agrupar por contexto da data']):
+            ctk.CTkSwitch(sec,text=texto,variable=var,onvalue=True,offvalue=False,
+                          font=(FONTE,11),text_color=TEXT,progress_color=EMERALD,
+                          fg_color=BORDER_SOFT,button_color=TEXT,
+                          button_hover_color=('#FFFFFF','#FFFFFF'),switch_width=42,
+                          switch_height=22).pack(fill='x',padx=16,pady=4)
+        self._botao(sec,'⚡  ORGANIZAR AGORA',self._organizar,height=50,
+                    corner_radius=10,fg_color=EMERALD,hover_color=EMERALD_HOVER,
+                    text_color=EMERALD_INK,
+                    font=(FONTE,14,'bold')).pack(fill='x',padx=14,pady=(14,8))
+        self.progresso=ctk.CTkProgressBar(sec,height=8,corner_radius=4,
+                                          fg_color=BORDER,progress_color=EMERALD)
+        self.progresso.set(0)
+        self.progresso.pack(fill='x',padx=16,pady=(0,6))
+        ctk.CTkLabel(sec,textvariable=self.status,font=(FONTE,9),
+                     text_color=MUTED).pack(pady=(0,12))
 
-        seclog=self.painel(esq); seclog.pack(fill='both',expand=True,pady=(0,10))
-        self.label(seclog,'Registo de atividade (chamadas de API e passos)',11,True).pack(anchor='w',padx=14,pady=(12,7))
-        self.log=tk.Text(seclog,bg=BG,fg=MUTED,wrap='word',state='disabled',relief='flat',
-                         font=('Consolas',9),padx=10,pady=8,height=8)
-        self.log.pack(fill='both',expand=True,padx=12,pady=(0,12))
-        self.rolagem=tk.Scrollbar(seclog,command=self.log.yview,bg=PANEL2,relief='flat')
-        self.rolagem.pack(side='right',fill='y',padx=(0,12))
-        self.log.configure(yscrollcommand=self.rolagem.set)
+        # ---------- card 4: registo ----------
+        seclog=self._card(esq)
+        seclog.grid(row=3,column=0,sticky='nsew',pady=(8,0))
+        self._titulo_card(seclog,'Registo de atividade (chamadas de API e passos)')
+        self.log=ctk.CTkTextbox(seclog,height=80,corner_radius=8,border_width=0,
+                                fg_color=INPUT,text_color=MUTED,
+                                font=('Consolas',9),wrap='word',border_spacing=6,
+                                scrollbar_button_color=BORDER_SOFT,
+                                scrollbar_button_hover_color=MUTED)
+        self.log.pack(fill='both',expand=True,padx=14,pady=(0,14))
+        self.log.configure(state='disabled')
         self._log('Interface iniciada. Aguardando ação.')
 
-        cab=tk.Frame(direita,bg=PANEL); cab.pack(fill='x')
-        self.label(cab,'💬  Chat com OrganizaIA',15,True).pack(anchor='w',padx=14,pady=15)
-        tk.Frame(direita,bg=BORDER,height=1).pack(fill='x')
-        # Reservar primeiro a faixa inferior para a entrada do chat.
-        envio=tk.Frame(direita,bg=PANEL)
-        envio.pack(side='bottom',fill='x',padx=10,pady=(0,10))
-        self.entrada=tk.Entry(envio,bg=BG,fg=TEXT,insertbackground=TEXT,relief='flat',font=('Segoe UI',10))
-        self.entrada.pack(side='left',fill='x',expand=True,ipady=12,padx=(0,7))
+        # ---------- coluna direita: chat ----------
+        direita.grid_columnconfigure(0,weight=1)
+        direita.grid_rowconfigure(2,weight=1)
+        cab=ctk.CTkFrame(direita,fg_color='transparent')
+        cab.grid(row=0,column=0,sticky='ew')
+        ctk.CTkLabel(cab,text='💬  Chat com OrganizaIA',font=(FONTE,15,'bold'),
+                     text_color=TEXT).pack(side='left',padx=16,pady=16)
+        ctk.CTkLabel(cab,text='assistente',font=(FONTE,9),
+                     text_color=MUTED).pack(side='right',padx=16)
+        ctk.CTkFrame(direita,fg_color=BORDER,height=1,
+                     corner_radius=0).grid(row=1,column=0,sticky='ew')
+
+        composer=ctk.CTkFrame(direita,fg_color=INPUT,corner_radius=12,
+                              border_width=1,border_color=BORDER_SOFT)
+        composer.grid(row=3,column=0,sticky='ew',padx=12,pady=(0,12))
+        self.entrada=ctk.CTkEntry(composer,
+                                  placeholder_text='Digite como quer organizar seus arquivos...',
+                                  height=42,corner_radius=0,fg_color='transparent',
+                                  border_width=0,text_color=TEXT,
+                                  placeholder_text_color=MUTED,font=(FONTE,12))
+        self.entrada.pack(side='left',fill='x',expand=True,padx=(10,6),pady=6)
         self.entrada.bind('<Return>',lambda e:self._enviar())
-        self.botao(envio,'Enviar',self._enviar,bg=GREEN,fg='#05291e').pack(side='right')
+        self._botao(composer,'Enviar',self._enviar,width=86,height=34,
+                    fg_color=EMERALD,hover_color=EMERALD_HOVER,
+                    text_color=EMERALD_INK).pack(side='right',padx=6,pady=6)
 
-        self.historico=tk.Text(direita,bg=BG,fg=TEXT,wrap='word',state='disabled',relief='flat',font=('Segoe UI',11),padx=14,pady=14,spacing3=12)
-        self.historico.pack(side='top',fill='both',expand=True,padx=10,pady=10)
-        self.historico.tag_configure('bot',foreground='#b5d9ff'); self.historico.tag_configure('user',foreground='#d8fce9')
+        self.chat=ctk.CTkScrollableFrame(direita,fg_color='transparent',
+                                         corner_radius=0,
+                                         scrollbar_button_color=BORDER_SOFT,
+                                         scrollbar_button_hover_color=MUTED)
+        self.chat.grid(row=2,column=0,sticky='nsew',padx=(10,2),pady=(10,4))
+        # add='+' preserva o binding interno que mantem o scrollregion do canvas
+        self.chat.bind('<Configure>',self._ao_redimensionar_chat,add='+')
+        self.chat._parent_canvas.bind('<Configure>',self._ao_redimensionar_canvas,add='+')
+
         self._mensagem('bot','Olá! Escolha uma pasta ou alguns arquivos ao lado, configure sua API Key e me diga como quer organizar seus arquivos.')
-        self.label(self,'API: configure GLM_API_KEY no ambiente ou arquivo .env',9,color=MUTED).pack(anchor='e',padx=23,pady=(0,8))
 
+    # ---------- estado / visual ----------
+    def _atualizar_badge(self):
+        """Mostra apenas presenca da chave; nunca le nem exibe o valor."""
+        try:
+            conectada=bool(chave_glm())
+        except Exception:
+            conectada=False
+        self.badge_dot.configure(text_color=SUCCESS if conectada else WARNING)
+        self.badge_txt.configure(
+            text='IA conectada' if conectada else 'IA não configurada',
+            text_color=TEXT if conectada else WARNING)
+        self.badge.configure(border_color=BORDER if conectada else ('#FDE9C8','#3A2E14'))
+
+    def _mudar_tema(self,valor):
+        """Alterna entre tema claro e escuro (todas as cores sao tuplas)."""
+        escuro=valor.startswith('🌙')
+        ctk.set_appearance_mode('dark' if escuro else 'light')
+        try:self.seletor_tema.set(valor)
+        except Exception:pass
+        self._log('Tema escuro ativado' if escuro else 'Tema claro ativado')
+
+    def _mudar_modo(self,valor):
+        """CTkSegmentedButton exibe texto; self.modo mantem 'ia'/'tipo'."""
+        self.modo.set('ia' if valor==MODOS['ia'] else 'tipo')
+
+    def _barra(self,event=None):
+        self.progresso.set(self.pct)
+        self.progresso.configure(progress_color=SUCCESS if self.pct>=1 else EMERALD)
+
+    def _zerar_barra(self):
+        if not self.ocupado:
+            self.pct=0.0; self.status.set('Pronto'); self._barra()
+
+    # ---------- log ----------
     def _log(self,texto):
         """Registo de metadados (nunca conteudo de arquivo nem chave). Cap 500 linhas."""
         from datetime import datetime
@@ -116,21 +288,7 @@ class Interface(tk.Tk):
             self.status.set(f'{int(round(self.pct*100))}% — {texto}')
         self._barra()
 
-    def _barra(self,event=None):
-        w=self.progresso.winfo_width()
-        self.progresso.delete('all')
-        cor=BLUE if self.pct>=1 else GREEN
-        if self.pct>0:
-            self.progresso.create_rectangle(0,0,max(3,w*self.pct),18,fill=cor,outline='')
-        if w>40:
-            texto=self.status.get() if self.ocupado else 'Pronto'
-            self.progresso.create_text(w/2,9,text=texto,fill=TEXT,
-                                       font=('Segoe UI',9,'bold'))
-
-    def _zerar_barra(self):
-        if not self.ocupado:
-            self.pct=0.0; self.status.set('Pronto'); self._barra()
-
+    # ---------- selecao de pasta/arquivos ----------
     def _buscar(self):
         pasta=filedialog.askdirectory(initialdir=self.pasta.get() if Path(self.pasta.get()).is_dir() else str(Path.home()))
         if pasta:self.pasta.set(pasta);self.sessao=None
@@ -157,12 +315,89 @@ class Interface(tk.Tk):
         extra=f' ... +{len(self.arquivos)-4}' if len(self.arquivos)>4 else ''
         self.rotulo_arquivos.set(f'{len(self.arquivos)} arquivo(s): {nomes}{extra}')
 
-    def _mensagem(self,autor,conteudo):
-        self.historico.configure(state='normal')
-        self.historico.insert('end',('OrganizaIA' if autor=='bot' else 'Você')+'\n',autor)
-        self.historico.insert('end',str(conteudo)+'\n\n')
-        self.historico.configure(state='disabled');self.historico.see('end')
+    # ---------- chat ----------
+    def _wrap_chat(self):
+        largura=self.chat.winfo_width()
+        if largura<=1:largura=520
+        return max(220,int(largura*0.70))
 
+    def _ao_redimensionar_canvas(self,event=None):
+        """Atualiza o scrollregion sempre que a area visivel muda de tamanho."""
+        try:
+            bbox=self.chat._parent_canvas.bbox('all')
+            if bbox:self.chat._parent_canvas.configure(scrollregion=bbox)
+        except Exception:pass
+
+    def _ajustar_scrollregion(self):
+        try:
+            canvas=self.chat._parent_canvas
+            canvas.update_idletasks()
+            bbox=canvas.bbox('all')
+            if bbox:canvas.configure(scrollregion=bbox)
+        except Exception:pass
+
+    def _ao_redimensionar_chat(self,event=None):
+        if self._wrap_after is not None:
+            try:self.after_cancel(self._wrap_after)
+            except Exception:pass
+        self._wrap_after=self.after(120,self._aplicar_wrap)
+
+    def _aplicar_wrap(self):
+        self._wrap_after=None
+        largura=self._wrap_chat()
+        for _linha,corpo in self._balaos:
+            try:corpo.configure(wraplength=largura)
+            except Exception:pass
+        self._ajustar_scrollregion()
+
+    def _rolar_chat(self):
+        """Mantem o canvas rolavel e desce ate a mensagem mais recente."""
+        try:
+            canvas=self.chat._parent_canvas
+            canvas.update_idletasks()
+            bbox=canvas.bbox('all')
+            if bbox:canvas.configure(scrollregion=bbox)
+            canvas.yview_moveto(1.0)
+        except Exception:
+            pass
+
+    def _no_fim_do_chat(self):
+        """True quando a view ja esta no fim (ou o conteudo cabe na tela)."""
+        try:
+            _topo,fim=self.chat._parent_canvas.yview()
+            return fim>=0.999
+        except Exception:
+            return True
+
+    def _mensagem(self,autor,conteudo):
+        """Balão distinto para a IA (esquerda) e para o usuário (direita)."""
+        eh_bot=autor=='bot'
+        deve_rolar=(not eh_bot) or self._no_fim_do_chat()
+        linha=ctk.CTkFrame(self.chat,fg_color='transparent')
+        linha.pack(fill='x',padx=6,pady=(4,6))
+        balao=ctk.CTkFrame(linha,fg_color=CARD if eh_bot else USER_BALAO,
+                           corner_radius=12,border_width=1,
+                           border_color=BORDER_SOFT if eh_bot else USER_BORDA)
+        balao.pack(side='left' if eh_bot else 'right',
+                   padx=(0,36) if eh_bot else (36,0))
+        ctk.CTkLabel(balao,text='OrganizaIA' if eh_bot else 'Você',
+                     font=(FONTE,10,'bold'),height=16,
+                     text_color=MUTED if eh_bot else USER_AUTOR,
+                     anchor='w').pack(anchor='w',padx=16,pady=(8,0))
+        corpo=ctk.CTkLabel(balao,text=str(conteudo),font=(FONTE,12),height=20,
+                           text_color=TEXT,justify='left',anchor='w',width=96,
+                           wraplength=self._wrap_chat())
+        corpo.pack(anchor='w',padx=16,pady=(1,8))
+        self._balaos.append((linha,corpo))
+        while len(self._balaos)>300:
+            antiga,_corpo=self._balaos.pop(0)
+            try:antiga.destroy()
+            except Exception:pass
+        if deve_rolar:
+            self.after(30,self._rolar_chat)
+            self.after(160,self._rolar_chat)
+
+    # ---------- execucao ----------
     def _rodar(self,func):
         if self.ocupado:return
         self.ocupado=True; self.pct=0.0; self._barra()
@@ -282,6 +517,7 @@ class Interface(tk.Tk):
         q=queue.Queue()
         self.after(0,lambda:q.put(messagebox.askyesno('Confirmar ação da IA',f'{acao}\n\nOrigem: {origem}\nDestino: {destino}')))
         return q.get()
+
 
 if __name__=='__main__':
     Interface().mainloop()
