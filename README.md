@@ -540,7 +540,7 @@ flowchart LR
     R -- texto >= 20 chars --> I[GLM Flash<br/>formato Anthropic<br/>cache por hash]
     I -- confianca < 0.70 --> RV[organizados/Revisar/]
     I -- ok --> O
-    O --> DB[(SQLite WAL<br/>arquivos | classificacoes | auditoria)]
+    O --> DB[(SQLite WAL<br/>arquivos<br/>classificacoes<br/>auditoria)]
     D -- hash repetido --> DUP[organizados/Duplicados/]
   end
   C[chat CLI 11 tools<br/>confirmação s/n] --> DB
