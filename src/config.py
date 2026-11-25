@@ -21,11 +21,11 @@ DADOS_DIR = BASE_DIR / "dados"
 LOGS_DIR = BASE_DIR / "logs"
 DB_PATH = DADOS_DIR / "organizaia.db"
 
-MAX_TAMANHO_BYTES = 20 * 1024 * 1024
+MAX_TAMANHO_BYTES = 100 * 1024 * 1024
 TRECHO_MAX_CHARS = 2000
 MIN_CHARS_IA = 20
 
-CATEGORIAS = ["Documentos", "Planilhas", "PDFs", "Textos"]
+CATEGORIAS = ["Documentos", "Planilhas", "PDFs", "Textos", "Imagens"]
 
 CATEGORIAS_CONTEUDO = ["Faturas", "Estudos", "Trabalho", "Pessoal", "Outros"]
 
@@ -38,6 +38,10 @@ LEITURA_COMPLETA_MAX_CHARS = 8000
 # 30s: gateway medido em 5-9s mesmo para pings; 10s do colega estourava -> "API ocupada".
 CHAT_TIMEOUT_SEG = 30.0
 CHAT_ESPERA_MODELOS = 4.0
+# Estilo da resposta: temperatura baixa corta divagacao; teto de tokens encurta.
+# 900 ainda cabe um criar_arquivo (.txt/.md) de tamanho normal em JSON.
+CHAT_TEMPERATURE = 0.2
+CHAT_MAX_TOKENS = 900
 
 # IA: endpoint no formato Anthropic (/v1/messages). Padrao: GLM (z.ai) gratuito.
 # Via .env aponta para Claude: IA_BASE_URL oficial https://api.anthropic.com
@@ -86,6 +90,16 @@ EXTENSAO_PARA_CATEGORIA = {
     ".ods": "Planilhas",
     ".txt": "Textos",
     ".md": "Textos",
+    ".jpg": "Imagens",
+    ".jpeg": "Imagens",
+    ".png": "Imagens",
+    ".gif": "Imagens",
+    ".webp": "Imagens",
+    ".bmp": "Imagens",
+    ".tif": "Imagens",
+    ".tiff": "Imagens",
+    ".heic": "Imagens",
+    ".svg": "Imagens",
 }
 
 EXTENSOES_PERMITIDAS = frozenset(EXTENSAO_PARA_CATEGORIA)

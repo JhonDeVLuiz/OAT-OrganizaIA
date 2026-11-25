@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 
 from . import regras, repositorio, seguranca
 from .config import (CATEGORIAS, CATEGORIAS_CONTEUDO, CHAT_ESPERA_MODELOS,
-                     CHAT_TIMEOUT_SEG, IA_BASE_URL, IA_MODELOS,
+                     CHAT_MAX_TOKENS, CHAT_TEMPERATURE, CHAT_TIMEOUT_SEG,
+                     IA_BASE_URL, IA_MODELOS,
                      GLM_ESPERA_MODELOS, GLM_TIMEOUT_SEG, MIN_CHARS_IA,
                      TRECHO_MAX_CHARS)
 
@@ -103,18 +104,22 @@ def chamar_chat_roteando(pedir_por_modelo, timeout=None, esperar=time.sleep):
     raise ultimo
 
 
-def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout):
+def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout,
+                    max_tokens=1024, temperature=None):
     """POST /v1/messages (formato Anthropic) e devolve o texto concatenado."""
     import urllib.error
     import urllib.request
 
     url = base_url.rstrip("/") + "/v1/messages"
-    corpo = json.dumps({
+    corpo = {
         "model": modelo_nome,
-        "max_tokens": 1024,
+        "max_tokens": max_tokens,
         "thinking": {"type": "disabled"},
         "messages": [{"role": "user", "content": prompt}],
-    }).encode("utf-8")
+    }
+    if temperature is not None:
+        corpo["temperature"] = temperature
+    corpo = json.dumps(corpo).encode("utf-8")
     pedido = urllib.request.Request(url, data=corpo, method="POST", headers={
         "x-api-key": chave,
         "anthropic-version": "2023-06-01",
@@ -169,7 +174,9 @@ def chamar_modelo_rota(nome, prompt):
     chave = chave_glm()
     if not chave:
         raise SemChave("sem GLM_API_KEY")
-    return _post_anthropic(IA_BASE_URL, chave, nome, prompt, GLM_TIMEOUT_SEG)
+    return _post_anthropic(IA_BASE_URL, chave, nome, prompt, GLM_TIMEOUT_SEG,
+                           max_tokens=CHAT_MAX_TOKENS,
+                           temperature=CHAT_TEMPERATURE)
 
 
 def chave_ativa():

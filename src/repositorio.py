@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS auditoria (
     id INTEGER PRIMARY KEY,
     acao TEXT NOT NULL,
     caminho TEXT NOT NULL,
+    usuario TEXT,
     data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_arquivos_hash ON arquivos(hash);
@@ -49,12 +50,26 @@ def _conectar(banco):
     return con
 
 
+def _usuario():
+    """Quem pediu a acao (usuario local da sessao), sem dado sensivel."""
+    import getpass
+    import os
+
+    try:
+        return getpass.getuser() or os.getenv("USERNAME") or "local"
+    except Exception:  # noqa: BLE001 - auditoria nunca derruba o fluxo
+        return os.getenv("USERNAME") or "local"
+
+
 def iniciar_banco(banco=None):
     """Cria tabelas e indices; ativa WAL. Idempotente."""
     con = _conectar(banco)
     try:
         con.execute("PRAGMA journal_mode=WAL;")
         con.executescript(_SCHEMA)
+        colunas = {linha[1] for linha in con.execute("PRAGMA table_info(auditoria);")}
+        if "usuario" not in colunas:  # migracao de bancos antigos
+            con.execute("ALTER TABLE auditoria ADD COLUMN usuario TEXT;")
         con.commit()
     finally:
         con.close()
@@ -93,16 +108,30 @@ def salvar_classificacao(banco, arquivo_id, categoria, confianca, data=None):
         con.close()
 
 
-def registrar_auditoria(banco, acao, caminho, data=None):
+def registrar_auditoria(banco, acao, caminho, data=None, usuario=None):
     data = data or _agora()
     con = _conectar(banco)
     try:
         cur = con.execute(
-            "INSERT INTO auditoria (acao, caminho, data) VALUES (?, ?, ?);",
-            (acao, str(caminho), data),
+            "INSERT INTO auditoria (acao, caminho, usuario, data) VALUES (?, ?, ?, ?);",
+            (acao, str(caminho), usuario or _usuario(), data),
         )
         con.commit()
         return cur.lastrowid
+    finally:
+        con.close()
+
+
+def listar_auditoria(banco, limite=20):
+    """Ultimas acoes: o que foi consultado, quem pediu e quando."""
+    con = _conectar(banco)
+    try:
+        linhas = con.execute(
+            "SELECT acao, caminho, usuario, data FROM auditoria"
+            " ORDER BY id DESC LIMIT ?;",
+            (int(limite),),
+        ).fetchall()
+        return [dict(linha) for linha in linhas]
     finally:
         con.close()
 
@@ -146,8 +175,9 @@ def salvar_movimentos(banco, movimentos):
                          mov.get("confianca", 1.0) or 1.0, mov.get("data") or _agora()),
                     )
             con.execute(
-                "INSERT INTO auditoria (acao, caminho, data) VALUES (?, ?, ?);",
-                ("mover", str(mov["destino"]), mov.get("data") or _agora()),
+                "INSERT INTO auditoria (acao, caminho, usuario, data) VALUES (?, ?, ?, ?);",
+                ("mover", str(mov["destino"]), mov.get("usuario") or _usuario(),
+                 mov.get("data") or _agora()),
             )
         con.commit()
         return ids

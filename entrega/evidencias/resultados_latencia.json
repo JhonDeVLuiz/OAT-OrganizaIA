@@ -1,0 +1,31 @@
+{
+  "pipeline_modo_tipo": {
+    "arquivos": 20,
+    "total_ms": 229.26,
+    "media_por_arquivo_ms": 11.46,
+    "arquivos_por_segundo": 87.24
+  },
+  "consulta_buscar_por_nome": {
+    "p50_ms": 3.61,
+    "p95_ms": 3.96,
+    "min_ms": 3.25,
+    "max_ms": 4.95,
+    "repeticoes": 100
+  },
+  "consulta_buscar_por_categoria": {
+    "p50_ms": 3.74,
+    "p95_ms": 4.38,
+    "min_ms": 3.35,
+    "max_ms": 7.57,
+    "repeticoes": 100
+  },
+  "chamada_ia": {
+    "resultado": [
+      "Faturas",
+      0.99
+    ],
+    "motivo": "ok",
+    "segundos_ate_falhar": 7.57,
+    "observacao": "gateway respondeu HTTP 401; nao e latencia de inferencia"
+  }
+}

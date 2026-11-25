@@ -1,0 +1,47 @@
+{
+  "pergunta": "valor da fatura de luz de marco de 2026",
+  "consulta_fts": "fatura OR luz OR marco",
+  "chunks_indexados": 46,
+  "documentos": 20,
+  "chunking": {
+    "tamanho": 500,
+    "overlap": 50
+  },
+  "top_k": 5,
+  "latencia_busca_ms": 0.78,
+  "resultados": [
+    {
+      "arquivo": "fatura-luz-2026-03.txt",
+      "hash": "1c50f279910b17f2...",
+      "score": -3.7117,
+      "trecho": "DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nCOMPANHIA DE ENERGIA EXEMPLO S.A.\nFATURA DE ENERGIA ELETRICA - REF. MARCO/2026\n\nInstalacao (exemplo): 000000000-0\nCliente: MARIA S"
+    },
+    {
+      "arquivo": "checklist-mudanca-apartamento.txt",
+      "hash": "6ebb705ee4b14cd0...",
+      "score": -3.5198,
+      "trecho": "nto da internet na residência antiga (dia 30)\n\nNo dia:\n[ ] conferir caixa por caixa com lista impressa\n[ ] tirar foto de contadores (água e luz demo)\n[ ] entregar chaves ao sindico exemplo\n\nDepois:\n[ "
+    },
+    {
+      "arquivo": "boleto_escola_exemplo.txt",
+      "hash": "14609385a7a21778...",
+      "score": -2.0708,
+      "trecho": "DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nCOLlegio DEMO Ltda.\nBOLETO DE MENSALIDADE ESCOLAR - MARCO/2026\n\nAluno: PEDRO FICTICIO SOARES    Turma: 6 ano   Matricula: 000000\nR"
+    },
+    {
+      "arquivo": "carta_banco_exemplo.txt",
+      "hash": "a6cd0e2fac708c26...",
+      "score": -2.0453,
+      "trecho": "DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nBANCO EXEMPLO S.A.\nAviso de pendencia (carta inventada, fim didatico)\n\nRef.: Agência 0000-0 - Conta 00000000-0\nCliente: MARIA SOAR"
+    },
+    {
+      "arquivo": "fatura-agua-2026-02.txt",
+      "hash": "56a99bf9382a840a...",
+      "score": -2.0286,
+      "trecho": "                           R$ 113,20\nVencimento: 15/03/2026\n\nHistorico ficticio (m3): 12 - 10 - 13 - 11 - 9 - 11\nMedia dos ultimos 6 meses: 11,0 m3\n\nCd de barras (inventado): [CARTAO] 00000000 0 000\nC"
+    }
+  ],
+  "prompt_aumentado": "Responda usando SOMENTE os trechos abaixo e cite o hash do arquivo.\nCategorias permitidas: Faturas, Estudos, Trabalho, Pessoal, Outros.\nPergunta: valor da fatura de luz de marco de 2026\n\n[1] arquivo=fatura-luz-2026-03.txt hash=1c50f279910b17f2bcb935736b50bf9f68db44bf69df06f294dba168ac533f30\nDOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nCOMPANHIA DE ENERGIA EXEMPLO S.A.\nFATURA DE ENERGIA ELETRICA - REF. MARCO/2026\n\nInstalacao (exemplo): 000000000-0\nCliente: MARIA SOARES FICTICIA\nCPF/CNPJ: [CPF]\nEndereco: Rua Ficticia das Palmeiras, 120 - Apto 302\nBairro: Jardim Exemplo - Cidade Demo - CEP 00000-000\n\nVencimento: 20/03/2026\nValor total: R$ 184,73\n\nResumo do consumo:\n- Leitura anterior: 04/02/2026   kwh: 1250\n- Leitura atual:    03/03/2026   kwh: 1394\n-\n\n[2] arquivo=checklist-mudanca-apartamento.txt hash=6ebb705ee4b14cd0a26bf6bc89ee2827f09361b3d6429cb376400e110d0cc436\nnto da internet na residência antiga (dia 30)\n\nNo dia:\n[ ] conferir caixa por caixa com lista impressa\n[ ] tirar foto de contadores (água e luz demo)\n[ ] entregar chaves ao sindico exemplo\n\nDepois:\n[ ] trocar endereço no banco demo\n[ ] atualizar cadastro da escola exemplo\n[ ] comprar luminária nova para sala (R$ alocação fake)\n\nTudo ficticio, para treinar categoria Outros/Trabalho.\n\n[3] arquivo=boleto_escola_exemplo.txt hash=14609385a7a217781970ca4c622286c6b3caca6ab56eb436323253bd01d39aaa\nDOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nCOLlegio DEMO Ltda.\nBOLETO DE MENSALIDADE ESCOLAR - MARCO/2026\n\nAluno: PEDRO FICTICIO SOARES    Turma: 6 ano   Matricula: 000000\nResponsavel: MARIA SOARES FICTICIA (CPF [CPF])\nE-mail de contato: [EMAIL]\n\nItem: Mensalidade escolar\nValor: R$ 480,00\nVencimento: 10/03/2026\nDesconto por pontualidade: R$ 24,00 (ate o dia 07)\nValor com desc",
+  "geracao": "blocked",
+  "motivo": "HTTP 401 no gateway de IA em 16/11/2026"
+}

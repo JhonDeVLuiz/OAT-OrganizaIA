@@ -1,0 +1,334 @@
+"""Fase 2: entrada/ -> organizados/. Dry-run, log com id, sufixo, desfazer."""
+import json
+import shutil
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
+
+from . import classificador, config, duplicatas, leitor, regras, repositorio, seguranca
+
+SUFFIXOS_TEMPORARIOS = (".tmp", ".crdownload", ".part")
+
+
+def _id_execucao():
+    agora = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{agora}_{uuid4().hex[:8]}"
+
+
+def _padrao(pasta, nome):
+    destino = Path(pasta) / nome
+    if not destino.exists():
+        return destino
+    haste, ext = Path(nome).stem, Path(nome).suffix
+    i = 1
+    while True:
+        candidato = Path(pasta) / f"{haste} ({i}){ext}"
+        if not candidato.exists():
+            return candidato
+        i += 1
+
+
+def _ignorado(origem, motivo):
+    return {"status": "ignorado", "origem": str(origem), "motivo": motivo}
+
+
+def _processar_um(caminho, entrada, organizados, indice, max_bytes,
+                  db_path=None, usar_ia=True, cache_ia=None, modo="tipo", orcamento=None):
+    origem = Path(caminho)
+    if origem.suffix.lower() in SUFFIXOS_TEMPORARIOS:
+        return _ignorado(origem, "temporario")
+    if not origem.is_file():
+        return _ignorado(origem, "ausente")
+    try:
+        seguranca.resolver_confinado(origem, entrada)
+    except ValueError:
+        return _ignorado(origem, "fora-da-raiz")
+    if seguranca.excluido(origem.name):
+        return _ignorado(origem, "excluido")
+    try:
+        nome = seguranca.nome_seguro(origem.name)
+    except ValueError:
+        return _ignorado(origem, "nome-invalido")
+    if origem.is_symlink():
+        return _ignorado(origem, "link")
+    try:
+        if origem.stat().st_size > max_bytes:
+            return _ignorado(origem, "grande")
+    except OSError:
+        return _ignorado(origem, "ausente")
+
+    resumo = duplicatas.sha256_arquivo(origem)
+    confianca, origem_decisao, nota = 1.0, "regras", None
+    if resumo in indice:
+        destino = _padrao(Path(organizados) / "Duplicados", nome)
+        status, categoria = "duplicado", regras.decidir(nome)
+        origem_decisao = "duplicata"
+    elif modo == "ia" and usar_ia and db_path is not None:
+        categoria, confianca, origem_decisao, nota = _decidir_modo_ia(
+            origem, nome, resumo, db_path, cache_ia, orcamento)
+        pasta = (Path(organizados) / "Revisar") if categoria is None else (Path(organizados) / categoria)
+        destino = _padrao(pasta, nome)
+        status = "revisar" if categoria is None else "movido"
+        if status == "revisar":
+            origem_decisao = "revisao"
+            confianca = None
+    else:  # modo tipo: so regras por extensao, nenhuma chamada a IA
+        categoria = regras.decidir(nome)
+        pasta = (Path(organizados) / "Revisar") if categoria is None else (Path(organizados) / categoria)
+        destino = _padrao(pasta, nome)
+        status = "revisar" if categoria is None else "movido"
+        if status == "revisar":
+            origem_decisao = "revisao"
+            confianca = None
+    indice.add(resumo)
+    return {
+        "status": status,
+        "origem": str(origem),
+        "destino": str(destino),
+        "hash": resumo,
+        "categoria": categoria,
+        "confianca": confianca,
+        "origem_decisao": origem_decisao,
+        "nota": nota,
+    }
+
+
+def _novo_orcamento(avisar=None):
+    return {"usadas": 0, "avisado": False, "avisos": [], "avisar": avisar}
+
+
+def _avisar(orcamento, texto):
+    if orcamento is not None and not orcamento["avisado"]:
+        orcamento["avisado"] = True
+        orcamento["avisos"].append(texto)
+        if orcamento.get("avisar"):
+            orcamento["avisar"](texto)
+
+
+def _fallback_regras(nome, motivo, orcamento):
+    """IA indisponivel: regras por extensao; Revisar so se regras nao decidirem."""
+    _avisar(orcamento, f"IA indisponível ({motivo}), usando regras por extensão")
+    categoria = regras.decidir(nome)
+    if categoria is None:
+        return (None, None, "revisao", "IA indisponível")
+    return (categoria, 1.0, "regras", None)
+
+
+def _decidir_modo_ia(origem, nome, resumo, db_path, cache_ia, orcamento):
+    """Modo ia: conteudo primeiro; sem IA, regras; Revisar so se ambos falharem."""
+    if cache_ia is not None and resumo in cache_ia:
+        return cache_ia[resumo]
+    registrada = classificador.categoria_registrada(db_path, resumo)
+    if registrada is not None:
+        resultado = (registrada, None, "ia-registrada", None)
+    else:
+        if orcamento is not None and orcamento["usadas"] >= config.MAX_CHAMADAS_IA:
+            resultado = _fallback_regras(nome, "limite de chamadas", orcamento)
+        else:
+            if (orcamento is not None and orcamento["usadas"] > 0
+                    and config.INTERVALO_IA_SEG > 0):
+                time.sleep(config.INTERVALO_IA_SEG)
+            if orcamento is not None:
+                orcamento["usadas"] += 1
+            trecho = leitor.extrair_trecho(origem) or ""
+            detalhe = {}
+            ia = classificador.classificar_conteudo(nome, trecho, detalhe=detalhe)
+            if ia is not None:
+                resultado = (ia[0], ia[1], "ia", None)
+            elif detalhe.get("motivo") in ("sem-chave", "falha"):
+                resultado = _fallback_regras(nome, detalhe["motivo"], orcamento)
+            else:
+                resultado = (None, None, "revisao", "baixa-confiança")
+    if cache_ia is not None:
+        cache_ia[resumo] = resultado
+    return resultado
+
+
+def processar(entrada=None, organizados=None, logs=None, dry_run=False,
+              max_bytes=None, db_path=None, modo="tipo", avisar=None):
+    aviso = avisar or (lambda texto: None)
+    entrada = Path(entrada or config.ENTRADA_DIR)
+    organizados = Path(organizados or config.ORGANIZADOS_DIR)
+    logs = Path(logs or config.LOGS_DIR)
+    max_bytes = config.MAX_TAMANHO_BYTES if max_bytes is None else max_bytes
+    for pasta in (organizados / "Revisar", organizados / "Duplicados", logs):
+        pasta.mkdir(parents=True, exist_ok=True)
+
+    indice = duplicatas.indice_hashes(organizados, logs)
+    banco = db_path or config.DB_PATH
+    if not dry_run:
+        repositorio.iniciar_banco(banco)
+    cache_ia = {}
+    orcamento = _novo_orcamento(avisar)
+    movidos, ignorados = [], []
+    for item in sorted(entrada.iterdir()):
+        if not item.is_file():
+            continue
+        aviso(f"processando {item.name}...")
+        resultado = _processar_um(item, entrada, organizados, indice, max_bytes,
+                                  db_path=banco, usar_ia=True, cache_ia=cache_ia,
+                                  modo=modo, orcamento=orcamento)
+        if resultado["status"] == "ignorado":
+            ignorados.append(resultado)
+            continue
+        if dry_run:
+            movidos.append(resultado)
+            continue
+        Path(resultado["destino"]).parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(resultado["origem"], resultado["destino"])
+        movidos.append(resultado)
+
+    exec_id = None
+    if not dry_run and movidos:
+        exec_id = _id_execucao()
+        agora = datetime.now(timezone.utc).isoformat()
+        for mov in movidos:
+            mov["data"] = agora
+        (logs / f"exec_{exec_id}.json").write_text(
+            json.dumps({"id": exec_id, "data": agora, "movimentos": movidos},
+                       ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        repositorio.iniciar_banco(db_path)
+        repositorio.salvar_movimentos(db_path, movidos)
+    return {"id": exec_id, "movimentos": movidos, "ignorados": ignorados,
+            "dry_run": dry_run, "avisos": orcamento["avisos"], "modo": modo}
+
+
+def processar_um(caminho, entrada=None, organizados=None, logs=None,
+                 dry_run=False, max_bytes=None, db_path=None, modo="tipo",
+                 avisar=None):
+    """Uma so arquivo (usado pelo monitor). Gera log proprio se mover."""
+    aviso = avisar or (lambda texto: None)
+    aviso(f"processando {Path(caminho).name}...")
+    entrada = Path(entrada or config.ENTRADA_DIR)
+    organizados = Path(organizados or config.ORGANIZADOS_DIR)
+    logs = Path(logs or config.LOGS_DIR)
+    max_bytes = config.MAX_TAMANHO_BYTES if max_bytes is None else max_bytes
+    for pasta in (organizados / "Revisar", organizados / "Duplicados", logs):
+        pasta.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        repositorio.iniciar_banco(db_path or config.DB_PATH)
+
+    orcamento = _novo_orcamento(avisar)
+    resultado = _processar_um(caminho, entrada, organizados,
+                              duplicatas.indice_hashes(organizados, logs), max_bytes,
+                              db_path=(db_path or config.DB_PATH), usar_ia=True,
+                              cache_ia={}, modo=modo, orcamento=orcamento)
+    for texto in orcamento["avisos"]:
+        print(f"[aviso] {texto}")
+    if resultado["status"] == "ignorado" or dry_run:
+        return {"id": None, "movimentos": [resultado],
+                "ignorados": [], "dry_run": dry_run, "avisos": orcamento["avisos"],
+                "modo": modo}
+    Path(resultado["destino"]).parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(resultado["origem"], resultado["destino"])
+    exec_id = _id_execucao()
+    agora = datetime.now(timezone.utc).isoformat()
+    resultado["data"] = agora
+    (logs / f"exec_{exec_id}.json").write_text(
+        json.dumps({"id": exec_id, "data": agora, "movimentos": [resultado]},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    repositorio.iniciar_banco(db_path)
+    repositorio.salvar_movimentos(db_path, [resultado])
+    return {"id": exec_id, "movimentos": [resultado],
+            "ignorados": [], "dry_run": dry_run, "avisos": orcamento["avisos"],
+            "modo": modo}
+
+
+def _logs_ativos(logs_dir):
+    pasta = Path(logs_dir)
+    if not pasta.is_dir():
+        return []
+    return [log for log in pasta.glob("exec_*.json")
+            if not log.name.endswith(".undone.json")]
+
+
+def _raizes_padrao():
+    return (config.ENTRADA_DIR, config.ORGANIZADOS_DIR)
+
+
+def _movimento_valido(mov, raizes):
+    """Origem e destino confinados; False se log adulterado (nao restaura)."""
+    try:
+        seguranca.confinar_em(mov["origem"], raizes)
+        seguranca.confinar_em(mov["destino"], raizes)
+    except (ValueError, KeyError, TypeError):
+        return False
+    return True
+
+
+def prever_desfazer(logs_dir=None, raizes=None):
+    """Previa da ultima movimentacao existente (para confirmacao). None se vazio."""
+    logs = Path(logs_dir or config.LOGS_DIR)
+    raizes = tuple(raizes or _raizes_padrao())
+    ativos = sorted(_logs_ativos(logs), key=lambda p: p.stat().st_mtime)
+    if not ativos:
+        return None
+    dados = json.loads(ativos[-1].read_text(encoding="utf-8"))
+    for mov in reversed(dados.get("movimentos", [])):
+        if Path(mov["destino"]).is_file() and _movimento_valido(mov, raizes):
+            return {"id": dados.get("id"), "origem": mov["origem"], "destino": mov["destino"]}
+    return None
+
+
+def desfazer_ultima_movimentacao(logs_dir=None, db_path=None, raizes=None):
+    """Desfaz so a ultima movimentacao do log mais recente (uso do chat)."""
+    logs = Path(logs_dir or config.LOGS_DIR)
+    raizes = tuple(raizes or _raizes_padrao())
+    ativos = sorted(_logs_ativos(logs), key=lambda p: p.stat().st_mtime)
+    if not ativos:
+        return {"id": None, "restaurados": []}
+    ultimo = ativos[-1]
+    dados = json.loads(ultimo.read_text(encoding="utf-8"))
+    movs = [mov for mov in dados.get("movimentos", [])
+            if Path(mov["destino"]).is_file() and _movimento_valido(mov, raizes)]
+    if not movs:
+        return {"id": dados.get("id"), "restaurados": []}
+    mov = movs.pop()
+    origem = Path(mov["origem"])
+    origem.parent.mkdir(parents=True, exist_ok=True)
+    alvo = origem if not origem.exists() else _padrao(origem.parent, origem.name)
+    shutil.move(mov["destino"], str(alvo))
+    restaurados = [{"de": mov["destino"], "para": str(alvo)}]
+    dados["movimentos"] = [m for m in dados.get("movimentos", [])
+                           if m["destino"] != mov["destino"] or m["origem"] != mov["origem"]]
+    if dados["movimentos"]:
+        ultimo.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        ultimo.rename(ultimo.with_name(ultimo.name.replace(".json", ".undone.json")))
+    repositorio.iniciar_banco(db_path)
+    repositorio.registrar_auditoria(db_path, "desfazer", str(alvo))
+    return {"id": dados.get("id"), "restaurados": restaurados}
+
+
+def desfazer_ultima_execucao(logs_dir=None, db_path=None, raizes=None):
+    """Desfaz a ultima execucao inteira (todas as movimentacoes do id)."""
+    logs = Path(logs_dir or config.LOGS_DIR)
+    raizes = tuple(raizes or _raizes_padrao())
+    ativos = sorted(_logs_ativos(logs), key=lambda p: p.stat().st_mtime)
+    if not ativos:
+        return {"id": None, "restaurados": []}
+    ultimo = ativos[-1]
+    dados = json.loads(ultimo.read_text(encoding="utf-8"))
+    restaurados = []
+    for mov in reversed(dados.get("movimentos", [])):
+        if not _movimento_valido(mov, raizes):
+            continue  # log adulterado: nao restaura fora da raiz
+        destino = Path(mov["destino"])
+        if not destino.is_file():
+            continue
+        origem = Path(mov["origem"])
+        origem.parent.mkdir(parents=True, exist_ok=True)
+        alvo = origem if not origem.exists() else _padrao(origem.parent, origem.name)
+        shutil.move(str(destino), str(alvo))
+        restaurados.append({"de": str(destino), "para": str(alvo)})
+    ultimo.rename(ultimo.with_name(ultimo.name.replace(".json", ".undone.json")))
+    if restaurados:
+        repositorio.iniciar_banco(db_path)
+        for item in restaurados:
+            repositorio.registrar_auditoria(db_path, "desfazer", item["para"])
+    return {"id": dados.get("id"), "restaurados": restaurados}

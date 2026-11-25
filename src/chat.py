@@ -16,7 +16,13 @@ AVISO_ULTIMA_RODADA = (
     "ÚLTIMA RODADA: não chame ferramentas. Responda somente com texto agora.")
 
 SISTEMA = (
-    "Voce e o assistente do OrganizaIA. Responda em portugues, curto.\n"
+    "Voce e o assistente do OrganizaIA. Responda em portugues do Brasil, "
+    "direto e seco.\n"
+    "ESTILO (obrigatorio): no maximo 2 frases curtas ou 3 linhas; sem "
+    "saudacao, sem se apresentar, sem repetir a pergunta, sem resumir o que "
+    "voce fez, sem listar opcoes que ninguem pediu, sem explicar limitacoes "
+    "que nao foram perguntadas. Diga o resultado e pare. Se faltar um dado "
+    "essencial, faca UMA pergunta curta.\n"
     "Para agir, responda SOMENTE com JSON: "
     '{"tool": "<nome>", "args": {...}}. Ferramentas: listar_arquivos '
     '{"base": "entrada"|"organizados", "categoria": opcional}, '
@@ -528,7 +534,18 @@ class ChatSession:
             return {"ok": False, "erro": str(exc)}
 
     def _montar_entrada(self):
-        linhas = [SISTEMA] + [f"{m['papel']}: {m['texto']}" for m in self.historico]
+        # Diz a IA quais pastas REAIS ela enxerga, senao ela acha que so existe
+        # uma pasta literal chamada "entrada" e nega acesso (ex.: "nao vejo os
+        # Downloads") — sendo que o usuario escolheu essa pasta na interface.
+        contexto = (
+            f"CONTEXTO ATUAL: a pasta 'entrada/' e a pasta REAL "
+            f"'{self.entrada}' do computador do usuario (tudo que voce listar "
+            f"em 'entrada' esta nela, incluindo subpastas). A pasta "
+            f"'organizados/' e '{self.organizados}'. "
+            f"Quando o usuario perguntar por essa pasta (pelo nome ou caminho), "
+            f"ela E a sua 'entrada/' — liste sem dizer que nao tem acesso.\n"
+        )
+        linhas = [SISTEMA, contexto] + [f"{m['papel']}: {m['texto']}" for m in self.historico]
         return "\n".join(linhas)
 
     def _chamar(self, texto):

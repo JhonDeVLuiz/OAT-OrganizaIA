@@ -107,7 +107,7 @@ def test_chamar_usa_modelo_do_classificador(tmp_path, monkeypatch):
 
     capturado = {}
 
-    def _fake_post(_base, chave, modelo_nome, _prompt, _timeout):
+    def _fake_post(_base, chave, modelo_nome, _prompt, _timeout, **_kw):
         capturado.update(chave=chave, modelo=modelo_nome)
         return "ok simulado"
 
@@ -118,6 +118,25 @@ def test_chamar_usa_modelo_do_classificador(tmp_path, monkeypatch):
     assert sessao._chamar("oi") == "ok simulado"
     assert capturado["modelo"] == classificador.modelo()
     assert capturado["chave"] == "falsa"
+
+
+def test_chat_chama_modelo_com_temperatura_baixa_e_teto(tmp_path, monkeypatch):
+    from src import classificador
+
+    capturado = {}
+
+    def _fake_post(_base, _chave, _modelo, _prompt, _timeout, **kw):
+        capturado.update(kw)
+        return "ok simulado"
+
+    monkeypatch.setattr(classificador, "_post_anthropic", _fake_post)
+    monkeypatch.setenv("GLM_API_KEY", "falsa")
+    sessao, _ = _sessao(tmp_path)
+    sessao.chamar_ia = None
+    assert sessao._chamar("oi") == "ok simulado"
+    assert capturado["temperature"] == classificador.CHAT_TEMPERATURE
+    assert capturado["temperature"] < 0.5
+    assert capturado["max_tokens"] == classificador.CHAT_MAX_TOKENS
 
 
 def test_ler_fora_da_pasta_recusado(tmp_path):
@@ -305,7 +324,7 @@ def test_chat_glm_pula_modelo_falho(monkeypatch, tmp_path):
     monkeypatch.setenv("GLM_API_KEY", "falsa")
     monkeypatch.setattr(clf, "IA_MODELOS", ["a", "b"])
 
-    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout):
+    def _fake_post(_base, _chave, modelo_nome, _prompt, _timeout, **_kw):
         if modelo_nome == "a":
             raise RuntimeError("HTTP 429: Too Many Requests")
         return "resposta glm simulada"

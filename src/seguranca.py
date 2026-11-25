@@ -75,11 +75,18 @@ def nome_seguro(nome):
 
 
 def excluido(nome):
-    """Lista de exclusao: .env, chaves, senhas, documentos pessoais."""
+    """Lista de exclusao: .env, chaves, senhas, documentos pessoais.
+
+    Casa palavra inteira (ou separada por _ - . espaco), para nao bloquear
+    nomes legitimos por substring (ex.: "resenha" nao e "senha").
+    """
     base = str(nome).strip().lower()
     if base in NOMES_EXCLUIDOS:
         return True
-    return any(palavra in base for palavra in PALAVRAS_EXCLUIDAS)
+    return any(
+        re.search(rf"(?<![a-z0-9]){re.escape(palavra)}(?![a-z0-9])", base)
+        for palavra in PALAVRAS_EXCLUIDAS
+    )
 
 
 def extensao_permitida(ext):

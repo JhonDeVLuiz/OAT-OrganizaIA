@@ -10,6 +10,11 @@ from . import classificador, config, duplicatas, leitor, regras, repositorio, se
 
 SUFFIXOS_TEMPORARIOS = (".tmp", ".crdownload", ".part")
 
+# Pastas que a varredura recursiva nunca entra (destino e sistema).
+_PASTAS_IGNORADAS = {"organizaia_organizados", "organizados", "revisar",
+                     "duplicados", "$recycle.bin", "system volume information",
+                     "node_modules", ".git", "__pycache__", "appdata"}
+
 
 def _id_execucao():
     agora = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -31,6 +36,29 @@ def _padrao(pasta, nome):
 
 def _ignorado(origem, motivo):
     return {"status": "ignorado", "origem": str(origem), "motivo": motivo}
+
+
+def _varrer(entrada, organizados):
+    """Lista os arquivos a organizar: os soltos na raiz + os de subpastas.
+
+    Nunca entra na propria pasta de destino nem em pastas de sistema,
+    para nao reorganizar o que ja foi organizado nem travar em lixo do SO.
+    """
+    entrada = Path(entrada)
+    organizados = Path(organizados).resolve()
+    for item in sorted(entrada.iterdir()):
+        if item.is_file():
+            yield item
+            continue
+        if not item.is_dir():
+            continue
+        if item.resolve() == organizados:
+            continue  # pasta de destino: nada de organizar o proprio resultado
+        if item.name.strip().lower() in _PASTAS_IGNORADAS:
+            continue
+        for sub in item.rglob("*"):
+            if sub.is_file():
+                yield sub
 
 
 def _processar_um(caminho, entrada, organizados, indice, max_bytes,
@@ -162,9 +190,7 @@ def processar(entrada=None, organizados=None, logs=None, dry_run=False,
     cache_ia = {}
     orcamento = _novo_orcamento(avisar)
     movidos, ignorados = [], []
-    for item in sorted(entrada.iterdir()):
-        if not item.is_file():
-            continue
+    for item in _varrer(entrada, organizados):
         aviso(f"processando {item.name}...")
         resultado = _processar_um(item, entrada, organizados, indice, max_bytes,
                                   db_path=banco, usar_ia=True, cache_ia=cache_ia,

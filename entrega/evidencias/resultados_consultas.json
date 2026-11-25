@@ -1,0 +1,138 @@
+{
+  "volume": {
+    "arquivos": 100000,
+    "classificacoes": 100000,
+    "auditoria": 300000
+  },
+  "banco_temporario": "C:\\Users\\JHONZ~1.PC_\\AppData\\Local\\Temp\\organizaia_volume_iwmy2whr\\volume.db",
+  "q1_busca_por_nome": {
+    "sql": "SELECT hash, origem, destino, categoria, origem_decisao, criado_em FROM arquivos WHERE destino LIKE ? ESCAPE '\\' ORDER BY destino LIMIT 50;",
+    "antes": {
+      "termo_frequente": {
+        "plano": [
+          "SCAN arquivos USING INDEX idx_arquivos_destino"
+        ],
+        "tempo": {
+          "p50_ms": 1.37,
+          "p95_ms": 1.48,
+          "min_ms": 1.0,
+          "max_ms": 4.96,
+          "repeticoes": 200
+        }
+      },
+      "pior_caso_sem_match": {
+        "plano": [
+          "SCAN arquivos USING INDEX idx_arquivos_destino"
+        ],
+        "tempo": {
+          "p50_ms": 34.06,
+          "p95_ms": 39.02,
+          "min_ms": 29.59,
+          "max_ms": 54.35,
+          "repeticoes": 200
+        }
+      }
+    },
+    "com_indice_btree": {
+      "indice": "arquivos(destino) ja existe",
+      "termo_frequente": {
+        "plano": [
+          "SCAN arquivos USING INDEX idx_arquivos_destino"
+        ],
+        "tempo": {
+          "p50_ms": 1.36,
+          "p95_ms": 1.52,
+          "min_ms": 1.34,
+          "max_ms": 3.1,
+          "repeticoes": 200
+        }
+      },
+      "pior_caso_sem_match": {
+        "plano": [
+          "SCAN arquivos USING INDEX idx_arquivos_destino"
+        ],
+        "tempo": {
+          "p50_ms": 35.27,
+          "p95_ms": 46.1,
+          "min_ms": 30.89,
+          "max_ms": 52.96,
+          "repeticoes": 200
+        }
+      }
+    },
+    "depois_fts5": {
+      "indice": "CREATE VIRTUAL TABLE arquivos_fts USING fts5(destino, ...)",
+      "termo_frequente": {
+        "plano": [
+          "SCAN f VIRTUAL TABLE INDEX 0:M1",
+          "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "tempo": {
+          "p50_ms": 41.55,
+          "p95_ms": 48.33,
+          "min_ms": 35.85,
+          "max_ms": 57.42,
+          "repeticoes": 200
+        }
+      },
+      "pior_caso_sem_match": {
+        "plano": [
+          "SCAN f VIRTUAL TABLE INDEX 32:M1",
+          "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)"
+        ],
+        "tempo": {
+          "p50_ms": 0.05,
+          "p95_ms": 0.08,
+          "min_ms": 0.04,
+          "max_ms": 0.19,
+          "repeticoes": 200
+        }
+      },
+      "termo_seletivo": {
+        "plano": [
+          "SCAN f VIRTUAL TABLE INDEX 0:M1",
+          "SEARCH a USING INTEGER PRIMARY KEY (rowid=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "tempo": {
+          "p50_ms": 0.06,
+          "p95_ms": 0.1,
+          "min_ms": 0.05,
+          "max_ms": 0.16,
+          "repeticoes": 200
+        }
+      }
+    }
+  },
+  "q2_historico_auditoria": {
+    "sql": "SELECT acao, caminho, data FROM auditoria WHERE caminho = ? OR caminho = ? ORDER BY data;",
+    "antes": {
+      "plano": [
+        "SCAN auditoria",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "tempo": {
+        "p50_ms": 83.79,
+        "p95_ms": 95.1,
+        "min_ms": 72.51,
+        "max_ms": 119.3,
+        "repeticoes": 200
+      }
+    },
+    "depois": {
+      "indice": "CREATE INDEX idx_auditoria_caminho ON auditoria(caminho, data);",
+      "plano": [
+        "SEARCH auditoria USING INDEX idx_auditoria_caminho (caminho=?)",
+        "USE TEMP B-TREE FOR ORDER BY"
+      ],
+      "tempo": {
+        "p50_ms": 0.03,
+        "p95_ms": 0.04,
+        "min_ms": 0.03,
+        "max_ms": 0.3,
+        "repeticoes": 200
+      }
+    }
+  }
+}

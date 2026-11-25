@@ -67,7 +67,7 @@
   <h2>Sumário</h2>
   <table class="toc">
     <tr><td>1. Parte comum — título/problema · Canvas · README</td><td style="text-align:right">p. 3</td></tr>
-    <tr><td>2. Parte IA — arquitetura · LLM e custo/1000 usos · RAG · fine-tuning · n8n · ponto difícil</td><td style="text-align:right">p. 5</td></tr>
+    <tr><td>2. Parte IA — arquitetura · LLM e custo/1000 usos · RAG · fine-tuning · ponto difícil</td><td style="text-align:right">p. 5</td></tr>
     <tr><td>3. Parte Segurança — dados classificados · matriz de papéis com DENY · ameaça provada · 2 consultas lentas</td><td style="text-align:right">p. 9</td></tr>
     <tr><td>4. Parte Integração — diagrama único banco+IA · matriz ampliada · 2 ataques testados</td><td style="text-align:right">p. 13</td></tr>
     <tr><td>Anexo A — README do projeto (como rodar)</td><td style="text-align:right">p. 15</td></tr>
@@ -75,7 +75,7 @@
     <tr><td>Anexo C — Script SQLite + Script T-SQL (SQL Server)</td><td style="text-align:right">p. 19</td></tr>
     <tr><td>Anexo D — Roteiro de apresentação (5 minutos)</td><td style="text-align:right">p. 22</td></tr>
   </table>
-  <p class="cap">Projeto real: código-fonte em Python (`main.py`, `src/`), testes `pytest` (96+), banco SQLite. Este relatório descreve o que está implementado e o que é proposta (RAG, n8n, SQL Server). Todos os dados usados são fictícios; nenhuma chave de API está no repositório.</p>
+  <p class="cap">Projeto real: código-fonte em Python (`main.py`, `src/`), testes `pytest` (96+), banco SQLite. Este relatório descreve o que está implementado e o que é proposta (RAG, SQL Server). Todos os dados usados são fictícios; nenhuma chave de API está no repositório.</p>
 </div>
 
 <!-- ================= PARTE 1 ================= -->
@@ -244,13 +244,6 @@
     <tr><td><b>Fator humano</b></td><td>As correções do usuário em <code>Revisar/</code> são o rótulo de verdade para re-treino</td></tr>
   </table>
 
-  <h3>2.5 Fluxo n8n (gatilho → IA → ação → registro)</h3>
-  <div class="flow">
-    <div class="box"><b>① Gatilho</b><br>Watch Folder em <code>entrada/</code><br>ou agenda <code>*/5min</code> → <code>main.py --once</code></div><div class="arr">→</div>
-    <div class="box"><b>② IA</b><br>nó HTTP POST a z.ai<br>parser JSON tolerante</div><div class="arr">→</div>
-    <div class="box"><b>③ Ação</b><br>nó Execute Command<br>(reaproveita as regras)</div><div class="arr">→</div>
-    <div class="box"><b>④ Registro</b><br>INSERT no banco/auditoria<br>(parametrizado)</div>
-  </div>
   <p><b>Interface:</b> terminal (<code>main.py</code>) + bot de shell/terminal — formato explicitamente
   permitido pela disciplina; sem web/SaaS.</p>
 
@@ -405,9 +398,6 @@ CREATE TABLE dbo.arquivos (
   <div class="flow">
     <div class="box" style="flex:2"><b>chat (11 tools · confirmação s/n)</b> ← lê/faz ações — todas passam pela camada de permissão</div><div class="arr">→</div>
     <div class="box" style="flex:2"><b>camada de <span class="label aud">AUDITORIA</span></b> — toda ação registra ação/caminho/data; logs JSON + <code>--desfazer</code></div>
-  </div>
-  <div class="flow">
-    <div class="box" style="flex:2"><b>n8n externo:</b> watch-folder → HTTP POST z.ai → Execute Command (mover, reaproveitando regras) → registro no banco (parametrizado)</div>
   </div>
   <div class="layer"><b>Camada de permissões:</b> toda ação passa por <code>resolver_confinado</code>/<code>confinar_em</code> (só <code>entrada/</code> e <code>organizados/</code>), <code>excluido()</code> (nunca ler .env/senhas/chaves/doc. pessoais) e <code>nome_seguro()</code>.</div>
   <div class="layer dados"><b>Camada de dados:</b> SQL sempre paramétrico (<code>?</code>), hash UNIQUE para dedupe, WAL, backup .zip (<code>--exportar/--importar</code>).</div>
@@ -665,8 +655,7 @@ CREATE INDEX IX_auditoria_caminho ON dbo.auditoria(caminho, data);   -- otimiza�
     <tr>
       <td><b>4:00–4:45</b></td><td>Integração</td>
       <td>"No diagrama único: pasta → leitor → hash → IA GLM → organizador → auditoria, com as camadas de
-      permissão, dados e auditoria destacadas; o n8n replica o pipeline com watch-folder, HTTP POST + parser
-      JSON e gravação parametrizada. Na matriz ampliada, a IA vê metadados e trechos mascarados e executa
+      permissão, dados e auditoria destacadas. Na matriz ampliada, a IA vê metadados e trechos mascarados e executa
       11 ações confirmadas. Os dois ataques testados — prompt injection e SQL Injection — têm payload
       documentado e teste que os barram."</td>
     </tr>
