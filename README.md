@@ -54,6 +54,15 @@ Copy-Item .env.example .env
 
 Edite `.env` e coloque sua `GLM_API_KEY`. Sem chave, o projeto roda normalmente em **modo tipo** (regras por extensão, zero rede).
 
+#### Validação da chave de IA na interface desktop
+
+Na interface gráfica (`interface.py`), o cabeçalho exibe um indicador de status da IA:
+
+- **Verde (`● IA conectada`)**: a chave `GLM_API_KEY` está presente no `.env` e o provedor respondeu com sucesso ao teste de conexão.
+- **Vermelho/Amarelo (`● IA não configurada`)**: a chave está ausente, inválida ou o provedor não respondeu (ex.: gateway fora do ar, HTTP 401). Nesse caso o sistema continua funcionando em **modo tipo** (apenas regras por extensão), sem chamar a IA.
+
+O botão de validar (ou a verificação automática ao abrir a interface) tenta se comunicar com o provedor configurado em `IA_BASE_URL`. Se a resposta for bem-sucedida, o badge fica verde; se houver falha (credencial inválida, sem rede, timeout), o badge fica vermelho e a interface exibe a mensagem de erro no log de atividade — **nunca revelando o valor da chave**.
+
 ### 4) Rodar o organizador
 
 ```powershell
