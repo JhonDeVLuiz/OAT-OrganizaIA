@@ -62,8 +62,9 @@ de aplicar a configuração.
 #### Google Gemini oficial
 
 Use uma chave criada no Google AI Studio e selecione **Google Gemini**:
- **Exemplo:**
+ 
 ```text
+**Exemplo:**
 Gateway / Base URL: https://generativelanguage.googleapis.com/v1beta
 Modelo:             gemini-2.5-flash
 ```
