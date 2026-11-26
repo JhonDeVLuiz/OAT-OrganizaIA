@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from . import classificador, config, leitor, organizador, regras, repositorio, seguranca
+from . import classificador, config, gerador_local, leitor, organizador, regras, repositorio, seguranca
 from .classificador import SemChave, _eh_transitorio, chamar_chat_roteando
 
 MAX_RODADAS = 6
@@ -139,12 +139,13 @@ class ChatSession:
     """Historico + ferramentas. chamar_ia(texto)->str simula a API nos testes."""
 
     def __init__(self, entrada=None, organizados=None, logs=None, banco=None,
-                 perfil="ia", confirmar=None, chamar_ia=None, avisar=None):
+                 perfil="ia", modo_geracao="offline", confirmar=None, chamar_ia=None, avisar=None):
         self.entrada = Path(entrada or config.ENTRADA_DIR)
         self.organizados = Path(organizados or config.ORGANIZADOS_DIR)
         self.logs = Path(logs or config.LOGS_DIR)
         self.banco = banco or config.DB_PATH
         self.perfil = perfil
+        self.modo_geracao = modo_geracao  # "offline" (padrao, sem chave) ou "online" (IA via API)
         self.confirmar = confirmar or _confirmar_terminal
         self.chamar_ia = chamar_ia
         self.avisar = avisar or (lambda texto: None)

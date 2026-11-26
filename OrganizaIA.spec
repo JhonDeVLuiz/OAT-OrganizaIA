@@ -6,9 +6,9 @@ from PyInstaller.utils.hooks import collect_all
 # CustomTkinter tem arquivos de tema (JSON/imagens) que precisam vir junto.
 ctk_datas, ctk_binaries, ctk_hidden = collect_all('customtkinter')
 
-# .env embutido no exe; o runtime hook (pyi_rth_env.py) o extrai ao lado do
-# exe na primeira execucao, onde o config.py procura por ele.
-datas = list(ctk_datas) + [('src', 'src'), ('.env', '.')]
+# O executavel nao embute .env nem qualquer chave. A chave pode ser informada
+# pelo usuario no campo da interface e permanece somente na memoria da sessao.
+datas = list(ctk_datas) + [('src', 'src')]
 
 a = Analysis(
     ['interface.py'],

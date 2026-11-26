@@ -16,6 +16,28 @@ LIMIAR_CONFIANCA = 0.7
 LIMIAR_NOME = 0.85
 TENTATIVAS_IA = 3
 
+# Chave informada pelo usuario na interface. Ela fica somente na memoria do
+# processo e nunca e gravada em .env, logs ou arquivos do programa.
+_CHAVE_SESSAO = None
+_BASE_URL_SESSAO = None
+_MODELO_SESSAO = None
+_PROVEDOR_SESSAO = None  # "gemini" ou "anthropic"
+_LOG_CALLBACK = None
+
+
+def definir_log_callback(callback):
+    """Registra callback de observabilidade sem transportar chave ou prompt."""
+    global _LOG_CALLBACK
+    _LOG_CALLBACK = callback
+
+
+def _log_seguro(texto):
+    if _LOG_CALLBACK is not None:
+        try:
+            _LOG_CALLBACK(texto)
+        except Exception:
+            pass
+
 
 class SemChave(RuntimeError):
     """GLM_API_KEY ausente (modo so-regras / chat indisponivel)."""
@@ -52,13 +74,51 @@ def chamar_com_retry(func, tentativas=TENTATIVAS_IA, esperar=time.sleep):
 
 
 def chave_glm():
-    """GLM_API_KEY (z.ai) via python-dotenv. None se ausente."""
+    """Retorna a chave da sessao (digitada pelo usuario) ou a do .env.
+    Nenhuma delas e impressa ou salva em disco.
+    """
+    if _CHAVE_SESSAO:
+        return _CHAVE_SESSAO
     load_dotenv()
     return os.getenv("GLM_API_KEY") or None
 
 
+def definir_chave_sessao(chave, base_url=None, modelo_nome=None, provedor=None):
+    """Define credenciais/configuracao da sessao somente na RAM."""
+    global _CHAVE_SESSAO, _BASE_URL_SESSAO, _MODELO_SESSAO, _PROVEDOR_SESSAO
+    _CHAVE_SESSAO = chave if chave else None
+    _BASE_URL_SESSAO = base_url.strip().rstrip('/') if base_url else None
+    _MODELO_SESSAO = modelo_nome.strip() if modelo_nome else None
+    _PROVEDOR_SESSAO = provedor if provedor in ('gemini', 'anthropic') else None
+
+
+def provedor_sessao():
+    """Provedor escolhido na interface; sem sessao, usa o formato legado."""
+    if _PROVEDOR_SESSAO:
+        return _PROVEDOR_SESSAO
+    return 'gemini' if _CHAVE_SESSAO and not _BASE_URL_SESSAO else 'anthropic'
+
+
+def base_url_sessao():
+    """Gateway informado na interface ou o gateway padrao do provedor."""
+    if _BASE_URL_SESSAO:
+        return _BASE_URL_SESSAO
+    if provedor_sessao() == 'gemini':
+        return "https://generativelanguage.googleapis.com/v1beta"
+    return IA_BASE_URL
+
+
+def endpoint_ativo():
+    """Retorna o endpoint que o sistema vai utilizar nesta sessao."""
+    return base_url_sessao()
+
+
 def modelos():
-    """Lista de rotatividade da IA (IA_MODELOS do .env) — ex.: claude com haiku."""
+    """Usa o modelo digitado na sessao; sem ele, usa a lista configurada."""
+    if _MODELO_SESSAO:
+        return [_MODELO_SESSAO]
+    if _CHAVE_SESSAO:
+        return ["gemini-2.5-flash"]
     return list(IA_MODELOS)
 
 
@@ -104,12 +164,44 @@ def chamar_chat_roteando(pedir_por_modelo, timeout=None, esperar=time.sleep):
     raise ultimo
 
 
+def _post_gemini(base_url, chave, modelo_nome, prompt, timeout):
+    """POST Gemini generateContent e devolve o texto concatenado."""
+    import urllib.error
+    import urllib.request
+
+    url = f"{base_url.rstrip('/')}/models/{modelo_nome}:generateContent"
+    corpo = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    _log_seguro(f"IA: inicio | provedor=Google Gemini | modelo={modelo_nome} | gateway={base_url}")
+    pedido = urllib.request.Request(url, data=json.dumps(corpo).encode("utf-8"), method="POST", headers={
+        "x-goog-api-key": chave,
+        "content-type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    })
+    try:
+        with urllib.request.urlopen(pedido, timeout=timeout) as resposta:
+            dados = json.loads(resposta.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        _log_seguro(f"IA: erro | provedor=Google Gemini | modelo={modelo_nome} | HTTP {exc.code}")
+        raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
+    try:
+        texto = dados["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        _log_seguro(f"IA: resposta invalida | provedor=Google Gemini | modelo={modelo_nome}")
+        raise RuntimeError("resposta vazia ou invalida do Gemini")
+    _log_seguro(f"IA: sucesso | provedor=Google Gemini | modelo={modelo_nome}")
+    return texto
+
+
 def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout,
                     max_tokens=1024, temperature=None):
     """POST /v1/messages (formato Anthropic) e devolve o texto concatenado."""
     import urllib.error
     import urllib.request
 
+    _log_seguro(f"IA: inicio | provedor=Anthropic-compatible | modelo={modelo_nome} | gateway={base_url}")
     url = base_url.rstrip("/") + "/v1/messages"
     corpo = {
         "model": modelo_nome,
@@ -132,12 +224,15 @@ def _post_anthropic(base_url, chave, modelo_nome, prompt, timeout,
         with urllib.request.urlopen(pedido, timeout=timeout) as resposta:
             dados = json.loads(resposta.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
+        _log_seguro(f"IA: erro | provedor=Anthropic-compatible | modelo={modelo_nome} | HTTP {exc.code}")
         raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
     textos = [b.get("text", "") for b in dados.get("content", [])
               if isinstance(b, dict) and b.get("type") == "text"]
     bruto = "".join(textos)
     if not bruto:
+        _log_seguro(f"IA: resposta vazia | provedor=Anthropic-compatible | modelo={modelo_nome}")
         raise RuntimeError("resposta vazia do provedor")
+    _log_seguro(f"IA: sucesso | provedor=Anthropic-compatible | modelo={modelo_nome}")
     return bruto
 
 
@@ -149,7 +244,10 @@ def _chamar_glm(prompt, chave, esperar=time.sleep):
             esperar(GLM_ESPERA_MODELOS)
 
         def _pedir(_nome=nome):
-            return _post_anthropic(IA_BASE_URL, chave, _nome, prompt,
+            if provedor_sessao() == 'gemini':
+                return _post_gemini(base_url_sessao(), chave, _nome, prompt,
+                                    GLM_TIMEOUT_SEG)
+            return _post_anthropic(base_url_sessao(), chave, _nome, prompt,
                                    GLM_TIMEOUT_SEG)
 
         try:
@@ -170,11 +268,13 @@ def _chamar_provedor(prompt, esperar=time.sleep):
 
 
 def chamar_modelo_rota(nome, prompt):
-    """1 chamada num modelo da IA (usada pelo chat rapido)."""
+    """Uma chamada no provedor e modelo escolhidos para a sessao."""
     chave = chave_glm()
     if not chave:
-        raise SemChave("sem GLM_API_KEY")
-    return _post_anthropic(IA_BASE_URL, chave, nome, prompt, GLM_TIMEOUT_SEG,
+        raise SemChave("sem chave de API")
+    if provedor_sessao() == 'gemini':
+        return _post_gemini(base_url_sessao(), chave, nome, prompt, CHAT_TIMEOUT_SEG)
+    return _post_anthropic(base_url_sessao(), chave, nome, prompt, GLM_TIMEOUT_SEG,
                            max_tokens=CHAT_MAX_TOKENS,
                            temperature=CHAT_TEMPERATURE)
 

@@ -1,8 +1,12 @@
 # OrganizaIA
 
-Organizador de arquivos **local** com classificação por IA (GLM Flash, gratuito)
-e banco de dados com histórico/auditoria — trabalho final de
+Organizador de arquivos **local** com classificação por regras ou IA, interface desktop
+em CustomTkinter e banco de dados com histórico/auditoria — trabalho final de
 **Projeto de IA** + **Segurança e Otimização de BD**.
+
+A interface pode usar uma chave fornecida pelo próprio usuário durante a sessão,
+com suporte separado para **Google Gemini** e para gateways no formato
+**Anthropic-compatible**, como a CloudNexa quando a empresa confirmar esse formato.
 
 ## O que é
 
@@ -45,23 +49,55 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 
 Dependências: `watchdog`, `pypdf`, `python-docx`, `openpyxl`, `python-dotenv`, `pytest`, `fpdf2`, `google-genai`
 
-### 3) Configurar a chave de IA (opcional)
+### 3) Configurar a IA (opcional)
 
-```powershell
-# Copie o exemplo (não commite o .env real)
-Copy-Item .env.example .env
+A interface desktop permite informar a credencial sem distribuir a sua chave pessoal.
+A chave digitada fica somente na memória do processo, é apagada ao fechar o programa
+e nunca é colocada no executável, no banco, nos logs ou em arquivos de configuração.
+
+Na interface, escolha o provedor, informe a chave, o gateway e o modelo e clique em
+**Usar chave**. O botão **Mostrar/Ocultar** permite conferir o texto digitado antes
+de aplicar a configuração.
+
+#### Google Gemini oficial
+
+Use uma chave criada no Google AI Studio e selecione **Google Gemini**:
+
+```text
+Gateway / Base URL: https://generativelanguage.googleapis.com/v1beta
+Modelo:             gemini-2.5-flash
 ```
 
-Edite `.env` e coloque sua `GLM_API_KEY`. Sem chave, o projeto roda normalmente em **modo tipo** (regras por extensão, zero rede).
+O programa usa o endpoint `generateContent`, o cabeçalho `x-goog-api-key` e o
+corpo JSON próprio do Gemini. O modelo deve ser o identificador técnico exato,
+como `gemini-2.5-flash`; não use nomes de exibição como “Gemini Flash”.
 
-#### Validação da chave de IA na interface desktop
+#### CloudNexa ou outro gateway Anthropic-compatible
 
-Na interface gráfica (`interface.py`), o cabeçalho exibe um indicador de status da IA:
+Selecione **Anthropic-compatible** e informe a credencial autorizada pelo provedor:
 
-- **Verde (`● IA conectada`)**: a chave `GLM_API_KEY` está presente no `.env` e o provedor respondeu com sucesso ao teste de conexão.
-- **Vermelho/Amarelo (`● IA não configurada`)**: a chave está ausente, inválida ou o provedor não respondeu (ex.: gateway fora do ar, HTTP 401). Nesse caso o sistema continua funcionando em **modo tipo** (apenas regras por extensão), sem chamar a IA.
+```text
+Gateway / Base URL: https://cloudnexapro.site/api/public
+Modelo:             claude-haiku-4-5
+```
 
-O botão de validar (ou a verificação automática ao abrir a interface) tenta se comunicar com o provedor configurado em `IA_BASE_URL`. Se a resposta for bem-sucedida, o badge fica verde; se houver falha (credencial inválida, sem rede, timeout), o badge fica vermelho e a interface exibe a mensagem de erro no log de atividade — **nunca revelando o valor da chave**.
+O programa usa `POST /v1/messages`, o cabeçalho `x-api-key` e o formato Anthropic.
+A URL e o modelo acima só devem ser usados se a empresa confirmar que esse é o
+formato suportado. Não tente adivinhar rotas ou reutilizar uma chave de outro
+provedor.
+
+#### Indicador e logs
+
+O indicador **IA conectada** confirma apenas que uma chave foi configurada na
+sessão; ele não valida a chave sozinho. O painel **Registo de atividade** mostra
+informações seguras, como provedor, modelo, gateway, início, sucesso e código HTTP.
+A chave, o prompt e a resposta completa nunca aparecem no painel.
+
+Sem chave, com chave inválida ou com erro de rede, o programa continua funcionando
+em modo somente regras. O modo **Por Tipo de Arquivo** não depende de IA nem de rede.
+
+> Nunca envie uma chave real em capturas de tela, mensagens ou commits. Se uma chave
+> for exposta, revogue-a no painel do provedor e gere outra.
 
 ### 4) Rodar o organizador
 
@@ -90,6 +126,19 @@ O botão de validar (ou a verificação automática ao abrir a interface) tenta 
 . .\.venv\Scripts\python.exe -m pytest -q
 ```
 
+### 6) Compilar o executável para outra máquina
+
+Para gerar uma versão atualizada do programa, feche o executável em execução e rode:
+
+```powershell
+.\compilar.bat
+```
+
+O arquivo final será criado em `dist\\OrganizaIA.exe`. Teste sempre esse executável
+novo; abrir uma cópia antiga não inclui as alterações recentes. Para uma máquina de
+teste, distribua o executável sem o `.env` e peça ao usuário para usar uma chave própria
+e autorizada. O modo por regras funciona mesmo sem chave ou internet.
+
 ## Pilha
 
 | Camada | Tecnologia |
@@ -98,7 +147,7 @@ O botão de validar (ou a verificação automática ao abrir a interface) tenta 
 | Watch | `watchdog` observando `entrada/` |
 | Leitura | `pypdf`, `python-docx`, `openpyxl`, `.txt` |
 | Banco | SQLite (modo WAL) em `dados/organizaia.db` — 3 tabelas, SQL paramétrico |
-| IA | GLM `glm-4.7-flash`/`glm-4.5-flash` via `https://api.z.ai/api/anthropic` (formato Anthropic), **grátis**; modo tipo roda sem rede |
+| IA | Google Gemini (`generateContent`) ou gateway Anthropic-compatible (`/v1/messages`), configurados na interface; modo tipo roda sem rede |
 | Chat | CLI com function calling por texto — 11 tools |
 | Testes | `pytest` — **117 testes** (injection, path traversal, SQL, mascaramento, duplicatas, backup, chat, leitor) |
 | Backup | `.zip` do banco + manifest (`--exportar/--importar`) |
@@ -176,14 +225,22 @@ Todos criam bancos/pastas temporárias e apagam ao final:
 
 Gerado por `entrega\gerar_relatorio.py` → `entrega/OrganizaIA-relatorio-andamento-2026-11-16.pdf` (10 páginas), com o que funciona, o que falta, riscos e próximos passos.
 
-## IA: provedor e modo degradado
+## IA: provedores e modo degradado
 
-O classificador fala o formato Anthropic e aceita qualquer provedor compatível via `.env`
-(`IA_BASE_URL`, `IA_MODELOS`, `GLM_API_KEY`); o padrão do código é o GLM Flash (z.ai, gratuito).
-Nesta máquina o gateway configurado respondeu **HTTP 401**, então a geração por LLM está
-bloqueada. Sem chave ou sem rede nada quebra: o pipeline cai nas regras (`--modo tipo`) e o
-chat responde sem as ferramentas de IA. A recuperação para RAG (FTS5) e os prompts versionados
-estão em `entrega/`.
+A interface mantém a configuração do provedor na memória da sessão. O adaptador Gemini
+usa o endpoint `generateContent` e o adaptador Anthropic-compatible usa `/v1/messages`;
+eles não compartilham formato de requisição nem fazem fallback silencioso entre si.
+Quando o usuário informa um modelo, somente esse modelo é tentado.
+
+A configuração legada por `.env` continua disponível para execução do código antigo e
+para testes, mas não deve conter uma chave distribuída com o executável. Para a interface,
+preferencialmente deixe o `.env` sem credencial e use uma chave autorizada no campo da
+sessão.
+
+Sem chave, sem rede ou com erro do provedor, nada quebra: o pipeline cai nas regras
+(`--modo tipo`) e o chat informa que a IA está indisponível. Códigos HTTP comuns são:
+`401` credencial ausente ou inválida, `403` acesso negado, `404` rota/modelo não encontrado,
+`429` limite de uso e `5xx` falha temporária do provedor.
 
 ## Evidências e relatório
 
@@ -207,8 +264,9 @@ Saídas em `entrega/evidencias/*.json`; relatório em
 prompts em `entrega\prompts\`.
 
 > Documentos do trabalho (canvas, partes, scripts, base fictícia, PDF) em `entrega/`.
-> **Nenhuma chave de API está versionada.** Configure `GLM_API_KEY` em `.env`
-> (veja `.env.example`) — sem a chave, o projeto roda em modo `--modo tipo` apenas.
+> **Nenhuma chave de API está versionada.** Para a interface desktop, informe uma
+> chave autorizada no campo da sessão. Para o modo de terminal legado, configure a
+> variável correspondente no `.env` local — nunca distribua esse arquivo.
 
 ---
 # Conteúdo da Entrega

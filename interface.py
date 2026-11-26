@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - ambiente sem a dependencia
 
 from src import config, organizador
 from src.chat import ChatSession
-from src.classificador import chave_glm
+from src.classificador import chave_glm, definir_chave_sessao, definir_log_callback
 
 # Tokens de design — cada cor e uma tupla (claro, escuro)
 BG = ('#F4F7FA', '#08090B')            # fundo do app
@@ -119,7 +119,7 @@ class Interface(ctk.CTk):
         esq=ctk.CTkFrame(corpo,fg_color='transparent')
         esq.grid(row=0,column=0,sticky='nsew',padx=(0,7))
         esq.grid_columnconfigure(0,weight=1)
-        esq.grid_rowconfigure(3,weight=1)
+        esq.grid_rowconfigure(4,weight=1)
         direita=self._card(corpo)
         direita.grid(row=0,column=1,sticky='nsew',padx=(7,0))
 
@@ -164,9 +164,58 @@ class Interface(ctk.CTk):
             text_color=TEXT,font=(FONTE,10,'bold'),
             dynamic_resizing=False).pack(fill='x',padx=14,pady=(0,14))
 
-        # ---------- card 3: regras + acao ----------
+        # ---------- card 3: chave da API ----------
         sec=self._card(esq)
-        sec.grid(row=2,column=0,sticky='ew')
+        sec.grid(row=2,column=0,sticky='ew',pady=(0,8))
+        self._titulo_card(sec,'Chave da API')
+        ctk.CTkLabel(sec,text='Use uma chave autorizada pela empresa. Ela fica somente nesta sessão.',
+                     font=(FONTE,9),text_color=MUTED,anchor='w',wraplength=430,
+                     justify='left').pack(fill='x',padx=16,pady=(0,8))
+        ctk.CTkLabel(sec,text='Provedor',font=(FONTE,9),text_color=MUTED,
+                     anchor='w').pack(fill='x',padx=14,pady=(0,4))
+        self.provedor_api=tk.StringVar(value='Google Gemini')
+        self.seletor_provedor=ctk.CTkOptionMenu(
+            sec,values=['Google Gemini','Anthropic-compatible'],
+            variable=self.provedor_api,command=self._mudar_provedor,
+            height=32,corner_radius=8,fg_color=INPUT,button_color=EMERALD_MID,
+            button_hover_color=EMERALD_HOVER,text_color=TEXT,font=(FONTE,10))
+        self.seletor_provedor.pack(fill='x',padx=14,pady=(0,8))
+
+        linha_chave=ctk.CTkFrame(sec,fg_color='transparent')
+        linha_chave.pack(fill='x',padx=14,pady=(0,8))
+        self.chave_api=ctk.CTkEntry(linha_chave,show='•',height=38,corner_radius=8,
+                                    fg_color=INPUT,border_width=1,border_color=BORDER,
+                                    text_color=TEXT,placeholder_text='Cole sua chave aqui')
+        self.chave_api.pack(side='left',fill='x',expand=True)
+        self._botao(linha_chave,'Mostrar',self._alternar_visibilidade_chave,
+                    width=82,height=36,fg_color=EMERALD_MID,
+                    hover_color=EMERALD_HOVER,text_color=EMERALD_INK,
+                    font=(FONTE,10,'bold')).pack(side='left',padx=(8,0))
+        self._botao(linha_chave,'Usar chave',self._usar_chave,width=100,height=36,
+                    fg_color=EMERALD,hover_color=EMERALD_HOVER,
+                    text_color=EMERALD_INK,font=(FONTE,10,'bold')).pack(side='right',padx=(8,0))
+
+        linha_gateway=ctk.CTkFrame(sec,fg_color='transparent')
+        linha_gateway.pack(fill='x',padx=14,pady=(0,6))
+        ctk.CTkLabel(linha_gateway,text='Gateway / Base URL',font=(FONTE,9),
+                     text_color=MUTED,anchor='w').pack(side='left')
+        self.base_url_api=ctk.CTkEntry(linha_gateway,height=32,corner_radius=8,
+                                       fg_color=INPUT,border_width=1,border_color=BORDER,
+                                       text_color=TEXT,placeholder_text='https://... (opcional)')
+        self.base_url_api.pack(side='left',fill='x',expand=True,padx=(12,0))
+
+        linha_modelo=ctk.CTkFrame(sec,fg_color='transparent')
+        linha_modelo.pack(fill='x',padx=14,pady=(0,14))
+        ctk.CTkLabel(linha_modelo,text='Modelo (opcional)',font=(FONTE,9),
+                     text_color=MUTED,anchor='w').pack(side='left')
+        self.modelo_api=ctk.CTkEntry(linha_modelo,height=32,corner_radius=8,
+                                     fg_color=INPUT,border_width=1,border_color=BORDER,
+                                     text_color=TEXT,placeholder_text='ex: gemini-2.5-flash')
+        self.modelo_api.pack(side='left',fill='x',expand=True,padx=(12,0))
+
+        # ---------- card 4: regras + acao ----------
+        sec=self._card(esq)
+        sec.grid(row=3,column=0,sticky='ew')
         self._titulo_card(sec,'Regras automáticas')
         for var,texto in zip(self.regras,['Criar subpastas por data/mês',
                                           'Agrupar por contexto do arquivo',
@@ -187,22 +236,10 @@ class Interface(ctk.CTk):
         ctk.CTkLabel(sec,textvariable=self.status,font=(FONTE,9),
                      text_color=MUTED).pack(pady=(0,12))
 
-        # ---------- card 4: registo ----------
-        seclog=self._card(esq)
-        seclog.grid(row=3,column=0,sticky='nsew',pady=(8,0))
-        self._titulo_card(seclog,'Registo de atividade (chamadas de API e passos)')
-        self.log=ctk.CTkTextbox(seclog,height=80,corner_radius=8,border_width=0,
-                                fg_color=INPUT,text_color=MUTED,
-                                font=('Consolas',9),wrap='word',border_spacing=6,
-                                scrollbar_button_color=BORDER_SOFT,
-                                scrollbar_button_hover_color=MUTED)
-        self.log.pack(fill='both',expand=True,padx=14,pady=(0,14))
-        self.log.configure(state='disabled')
-        self._log('Interface iniciada. Aguardando ação.')
-
-        # ---------- coluna direita: chat ----------
+        # ---------- coluna direita: chat e logs ----------
         direita.grid_columnconfigure(0,weight=1)
         direita.grid_rowconfigure(2,weight=1)
+        direita.grid_rowconfigure(4,weight=0)
         cab=ctk.CTkFrame(direita,fg_color='transparent')
         cab.grid(row=0,column=0,sticky='ew')
         ctk.CTkLabel(cab,text='💬  Chat com OrganizaIA',font=(FONTE,15,'bold'),
@@ -235,9 +272,61 @@ class Interface(ctk.CTk):
         self.chat.bind('<Configure>',self._ao_redimensionar_chat,add='+')
         self.chat._parent_canvas.bind('<Configure>',self._ao_redimensionar_canvas,add='+')
 
-        self._mensagem('bot','Olá! Escolha uma pasta ou alguns arquivos ao lado, configure sua API Key e me diga como quer organizar seus arquivos.')
+        # ---------- registo de atividade ----------
+        seclog=self._card(direita)
+        seclog.grid(row=4,column=0,sticky='nsew',padx=12,pady=(0,12))
+        self._titulo_card(seclog,'Registo de atividade (chamadas de API e passos)')
+        self.log=ctk.CTkTextbox(seclog,height=160,corner_radius=8,border_width=0,
+                                fg_color=INPUT,text_color=MUTED,
+                                font=('Consolas',9),wrap='word',border_spacing=6,
+                                scrollbar_button_color=BORDER_SOFT,
+                                scrollbar_button_hover_color=MUTED)
+        self.log.pack(fill='both',expand=True,padx=14,pady=(0,14))
+        self.log.configure(state='disabled')
+        definir_log_callback(lambda texto: self.after(0, self._log, texto))
+        self._log('Interface iniciada. Aguardando ação.')
 
     # ---------- estado / visual ----------
+    def _alternar_visibilidade_chave(self):
+        """Mostra ou oculta o texto apenas no campo de entrada."""
+        visivel = bool(self.chave_api.cget('show'))
+        self.chave_api.configure(show='' if visivel else '•')
+        # O texto do botao descreve a proxima acao disponivel.
+        for widget in self.chave_api.master.winfo_children():
+            if isinstance(widget, ctk.CTkButton) and widget.cget('text') in ('Mostrar', 'Ocultar'):
+                widget.configure(text='Ocultar' if visivel else 'Mostrar')
+                break
+
+    def _mudar_provedor(self, valor):
+        """Atualiza os defaults visuais sem tocar em nenhuma chave."""
+        gemini = valor == 'Google Gemini'
+        self.base_url_api.delete(0, 'end')
+        self.modelo_api.delete(0, 'end')
+        if gemini:
+            self.base_url_api.insert(0, 'https://generativelanguage.googleapis.com/v1beta')
+            self.modelo_api.insert(0, 'gemini-2.5-flash')
+
+    def _usar_chave(self):
+        """Aplica a chave e o provedor somente na memoria desta execucao."""
+        chave = self.chave_api.get().strip()
+        base_url = self.base_url_api.get().strip()
+        modelo = self.modelo_api.get().strip()
+        if not chave:
+            definir_chave_sessao(None)
+            self._atualizar_badge()
+            self._log('Chave da sessao removida')
+            messagebox.showinfo('Chave da API','Nenhuma chave foi informada. O programa usara apenas o modo por regras.')
+            return
+        if base_url and not modelo:
+            messagebox.showwarning('Modelo obrigatorio','Ao informar um Gateway/Base URL diferente do padrao, voce tambem precisa preencher o campo Modelo para que o sistema saiba qual modelo usar.')
+            return
+        provedor = 'gemini' if self.provedor_api.get() == 'Google Gemini' else 'anthropic'
+        definir_chave_sessao(chave, base_url or None, modelo or None, provedor)
+        self.chave_api.delete(0,'end')
+        self._atualizar_badge()
+        self._log('Chave da sessao configurada (valor oculto)')
+        messagebox.showinfo('Chave da API','Chave configurada somente nesta sessao. Ela nao foi salva em arquivo.')
+
     def _atualizar_badge(self):
         """Mostra apenas presenca da chave; nunca le nem exibe o valor."""
         try:
