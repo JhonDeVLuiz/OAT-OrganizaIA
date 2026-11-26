@@ -1,0 +1,210 @@
+{
+  "experimento": "fine-tuning classificacao de conteúdo (offline)",
+  "dataset": {
+    "treino": 14,
+    "validacao": 6,
+    "categorias": [
+      "Faturas",
+      "Estudos",
+      "Trabalho",
+      "Pessoal",
+      "Outros"
+    ]
+  },
+  "baseline_regras": {
+    "acuracia": 0.5,
+    "f1_macro": 0.3,
+    "por_categoria": {
+      "Faturas": {
+        "precisao": 0.5,
+        "recall": 0.5,
+        "f1": 0.5,
+        "suporte": 2
+      },
+      "Estudos": {
+        "precisao": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "suporte": 2
+      },
+      "Trabalho": {
+        "precisao": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "suporte": 1
+      },
+      "Pessoal": {
+        "precisao": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "suporte": 1
+      },
+      "Outros": {
+        "precisao": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "suporte": 0
+      }
+    },
+    "matriz_confusao": {
+      "Faturas": {
+        "Faturas": 1,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 1,
+        "Outros": 0
+      },
+      "Estudos": {
+        "Faturas": 0,
+        "Estudos": 2,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      },
+      "Trabalho": {
+        "Faturas": 1,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      },
+      "Pessoal": {
+        "Faturas": 0,
+        "Estudos": 0,
+        "Trabalho": 1,
+        "Pessoal": 0,
+        "Outros": 0
+      },
+      "Outros": {
+        "Faturas": 0,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      }
+    }
+  },
+  "fewshot_local": {
+    "acuracia": 0.5,
+    "f1_macro": 0.2667,
+    "por_categoria": {
+      "Faturas": {
+        "precisao": 0.5,
+        "recall": 1.0,
+        "f1": 0.6667,
+        "suporte": 2
+      },
+      "Estudos": {
+        "precisao": 1.0,
+        "recall": 0.5,
+        "f1": 0.6667,
+        "suporte": 2
+      },
+      "Trabalho": {
+        "precisao": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "suporte": 1
+      },
+      "Pessoal": {
+        "precisao": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "suporte": 1
+      },
+      "Outros": {
+        "precisao": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "suporte": 0
+      }
+    },
+    "matriz_confusao": {
+      "Faturas": {
+        "Faturas": 2,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      },
+      "Estudos": {
+        "Faturas": 0,
+        "Estudos": 1,
+        "Trabalho": 0,
+        "Pessoal": 1,
+        "Outros": 0
+      },
+      "Trabalho": {
+        "Faturas": 1,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      },
+      "Pessoal": {
+        "Faturas": 1,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      },
+      "Outros": {
+        "Faturas": 0,
+        "Estudos": 0,
+        "Trabalho": 0,
+        "Pessoal": 0,
+        "Outros": 0
+      }
+    }
+  },
+  "predicoes_validacao": [
+    {
+      "arquivo": "carta_banco_exemplo.txt",
+      "verdadeiro": "Faturas",
+      "baseline": "Pessoal",
+      "fewshot": "Faturas",
+      "correto_base": false,
+      "correto_fewshot": true
+    },
+    {
+      "arquivo": "contrato_aluguel_2025.txt",
+      "verdadeiro": "Pessoal",
+      "baseline": "Trabalho",
+      "fewshot": "Faturas",
+      "correto_base": false,
+      "correto_fewshot": false
+    },
+    {
+      "arquivo": "fatura-agua-2026-02.txt",
+      "verdadeiro": "Faturas",
+      "baseline": "Faturas",
+      "fewshot": "Faturas",
+      "correto_base": true,
+      "correto_fewshot": true
+    },
+    {
+      "arquivo": "holerite_exemplo_ana.txt",
+      "verdadeiro": "Trabalho",
+      "baseline": "Faturas",
+      "fewshot": "Faturas",
+      "correto_base": false,
+      "correto_fewshot": false
+    },
+    {
+      "arquivo": "plano_estudos_eng.txt",
+      "verdadeiro": "Estudos",
+      "baseline": "Estudos",
+      "fewshot": "Estudos",
+      "correto_base": true,
+      "correto_fewshot": true
+    },
+    {
+      "arquivo": "resenha-livro-sapiens.txt",
+      "verdadeiro": "Estudos",
+      "baseline": "Estudos",
+      "fewshot": "Pessoal",
+      "correto_base": true,
+      "correto_fewshot": false
+    }
+  ]
+}

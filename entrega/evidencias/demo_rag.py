@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src import seguranca
+from src import gerador_local, seguranca
 
 RAIZ = Path(__file__).resolve().parents[2]
 BASE = RAIZ / "entrega" / "base-exemplo"
@@ -82,6 +82,10 @@ def executar():
             + "\n\n".join(f"[{i + 1}] arquivo={a} hash={h}\n{t}"
                          for i, (a, h, t, _) in enumerate(achados))
         )
+        trechos = [
+            {"arquivo": a, "hash": h, "texto": t} for a, h, t, _ in achados
+        ]
+        geracao = gerador_local.gerar_resposta(PERGUNTA, trechos)
         resultado = {
             "pergunta": PERGUNTA,
             "consulta_fts": _termos(PERGUNTA),
@@ -94,8 +98,9 @@ def executar():
                 {"arquivo": a, "hash": h[:16] + "...", "score": round(s, 4),
                  "trecho": t[:200]} for a, h, t, s in achados],
             "prompt_aumentado": prompt[:1800],
-            "geracao": "blocked",
-            "motivo": "HTTP 401 no gateway de IA em 16/11/2026",
+            "geracao": "local",
+            "resposta": geracao["resposta"],
+            "fontes": geracao["fontes"],
         }
         SAIDA.write_text(json.dumps(resultado, ensure_ascii=False, indent=2),
                          encoding="utf-8")

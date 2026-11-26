@@ -2,6 +2,7 @@
 import json
 import re
 import shutil
+import sqlite3
 from pathlib import Path
 
 from . import classificador, config, leitor, organizador, regras, repositorio, seguranca
@@ -138,11 +139,12 @@ class ChatSession:
     """Historico + ferramentas. chamar_ia(texto)->str simula a API nos testes."""
 
     def __init__(self, entrada=None, organizados=None, logs=None, banco=None,
-                 confirmar=None, chamar_ia=None, avisar=None):
+                 perfil="ia", confirmar=None, chamar_ia=None, avisar=None):
         self.entrada = Path(entrada or config.ENTRADA_DIR)
         self.organizados = Path(organizados or config.ORGANIZADOS_DIR)
         self.logs = Path(logs or config.LOGS_DIR)
         self.banco = banco or config.DB_PATH
+        self.perfil = perfil
         self.confirmar = confirmar or _confirmar_terminal
         self.chamar_ia = chamar_ia
         self.avisar = avisar or (lambda texto: None)
@@ -233,12 +235,19 @@ class ChatSession:
         consulta = str(args.get("consulta") or "").strip()
         if not consulta:
             return {"ok": False, "erro": "consulta vazia"}
-        if re.fullmatch(r"[0-9a-fA-F]{64}", consulta):
-            resultado = repositorio.historico_do_arquivo(self.banco, consulta.lower())
-        elif consulta in config.CATEGORIAS:
-            resultado = repositorio.buscar_por_categoria(self.banco, consulta)
-        else:
-            resultado = repositorio.buscar_por_nome(self.banco, consulta)
+        try:
+            if re.fullmatch(r"[0-9a-fA-F]{64}", consulta):
+                resultado = repositorio.historico_do_arquivo(
+                    self.banco, consulta.lower(), perfil=self.perfil)
+            elif consulta in config.CATEGORIAS:
+                resultado = repositorio.buscar_por_categoria(
+                    self.banco, consulta, perfil=self.perfil)
+            else:
+                resultado = repositorio.buscar_por_nome(
+                    self.banco, consulta, perfil=self.perfil)
+        except sqlite3.DatabaseError as exc:
+            # Perfil restrito (ia) nao tem acesso a auditoria/escrita.
+            return {"ok": False, "erro": f"acao nao permitida para o papel {self.perfil}: {exc}"}
         return {"ok": True, "resultado": resultado}
 
     def _contabilizar_leitura(self):

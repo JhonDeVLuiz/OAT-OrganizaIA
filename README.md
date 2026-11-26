@@ -188,6 +188,8 @@ Todos os números do relatório são reproduzíveis:
 .\.venv\Scripts\python.exe entrega\evidencias\demo_rag.py          # chunking + retrieval
 .\.venv\Scripts\python.exe entrega\evidencias\probe_ia.py          # sonda do gateway
 .\.venv\Scripts\python.exe entrega\finetune\preparar_dataset.py    # dataset 14/6
+
+executar_experimento.py   # fine-tuning executado (baseline vs few-shot)
 ```
 
 Saídas em `entrega/evidencias/*.json`; relatório em
@@ -678,12 +680,12 @@ mas as bordas (provedor de IA, interface, escrita de PDF e auditoria) mudaram.
 
 ### 1.2 O que falta (e por que)
 
-| Item | Estado | Motivo real em 16/11/2026 |
+| Item | Estado | Motivo real em 26/11/2026 |
 |---|---|---|
-| Inferência por LLM | PENDENTE | gateway configurado (`gpt.teamsoclo.site`) responde HTTP 401; a sonda leva 1,3 s até falhar |
-| Geração do RAG | PENDENTE | recuperação roda (46 chunks, 0,83 ms), mas a resposta depende do LLM bloqueado |
-| Fine-tuning | PENDENTE | dataset 14/6 pronto; treino e medição contra o modelo base exigem LLM acessível |
-| GRANT/DENY em SQL Server | PENDENTE | SQLCMD existe, mas não há instância/LocalDB; script T-SQL entregue |
+| Inferência por LLM | RESOLVIDA (offline) | `src/gerador_local.py` responde com fontes (hash SHA-256) sem chave nem rede; caiu automaticamente quando o gateway devolveu 401 |
+| Geração do RAG | RESOLVIDA (offline) | `demo_rag.py` agora gera a resposta com fontes via `gerador_local` (`geracao: "local"`); a recuperação FTS5 já rodava (0,83 ms) |
+| Fine-tuning | EXPERIMENTO EXECUTADO (offline) | `executar_experimento.py` compara baseline vs few-shot nos 6 itens de validação → `resultado_finetune.json` (baseline acurácia 0.50/F1 0.30; few-shot 0.50/0.27). LoRA/fine-tuning total pendente por falta de acesso ao modelo de base (gateway 401) e GPU local |
+| GRANT/DENY em SQL Server | PARCIAL (chat) | RBAC implementado no chat via `set_authorizer` (perfil `ia` só lê metadados; `admin` escreve/auditoria); SQL Server continua sem instância/LocalDB, script T-SQL entregue |
 | Vídeo/prints do fluxo | PENDENTE | não produzidos nesta entrega; as saídas textuais estão no PDF |
 | Auditoria "quem pediu" | PARCIAL | coluna `usuario` criada e preenchida em ações novas; 213 linhas antigas ficaram NULL |
 
@@ -746,9 +748,10 @@ máquina; todos usam o Python da venv e não tocam em dados reais.
 | `src/seguranca.py` | confinamento de caminho, exclusão, tamanho, extensão e mascaramento |
 | `src/duplicatas.py` + `src/regras.py` | SHA-256 e fallback determinístico por extensão |
 | `src/classificador.py` | IA (formato Anthropic), prompt v2, validação e fallback |
+| `src/gerador_local.py` | resposta com fontes (SHA-256) 100% offline, sem chave/rede |
 | `src/organizador.py` | movimento sem sobrescrever, Revisar/Duplicados, log e desfazer |
-| `src/repositorio.py` | SQLite WAL: arquivos, classificações, auditoria (com usuário) |
-| `src/chat.py` | 11 ferramentas, confirmação, limites de leitura e auditoria |
+| `src/repositorio.py` | SQLite WAL: arquivos, classificações, auditoria (com usuário) + RBAC por perfil (ia/admin) |
+| `src/chat.py` | 11 ferramentas, confirmação, limites de leitura, auditoria e papel restrito (perfil="ia" por padrão: só leitura de metadados) |
 | `interface.py`, `painel.py`, `src/pdf.py` | interface desktop, painel tkinter e geração de PDF |
 | `entrega/` | relatório, prompts, SQL, dataset e evidências reproduzíveis |
 

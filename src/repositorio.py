@@ -5,6 +5,46 @@ from pathlib import Path
 
 from .config import DB_PATH
 
+# Papéis de banco (equivalem a GRANT/DENY no SQL Server alvo).
+# Acesso do chat (agente-IA) é restrito a leitura de metadados: nunca escreve
+# nem enxerga a tabela de auditoria.
+PERFIS_BANCO = {
+    "ia": ({"arquivos", "classificacoes"}, False),
+    "admin": ({"arquivos", "classificacoes", "auditoria"}, True),
+}
+
+_ACOES_ESCRITA = {
+    sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE,
+    sqlite3.SQLITE_DROP_TABLE, sqlite3.SQLITE_ALTER_TABLE,
+    sqlite3.SQLITE_CREATE_TABLE, sqlite3.SQLITE_DROP_INDEX,
+}
+
+
+def conectar_restrito(banco, perfil="ia"):
+    """Abre conexão SQLite com autorizador por perfil (RBAC).
+
+    `perfil="ia"`: só SELECT em arquivos/classificacoes (metadados). Negado:
+    escrita, PRAGMA e acesso a auditoria. Usado pelo chat para garantir o
+    papel restrito sem dependir do SQL Server.
+    """
+    permitidas, escreve = PERFIS_BANCO.get(perfil, PERFIS_BANCO["ia"])
+
+    def autorizar(acao, arg1, arg2, banco_nome, gatilho):
+        if acao == sqlite3.SQLITE_READ:
+            return sqlite3.SQLITE_OK if arg1 in permitidas else sqlite3.SQLITE_DENY
+        if acao == sqlite3.SQLITE_SELECT:
+            return sqlite3.SQLITE_OK
+        if acao in _ACOES_ESCRITA:
+            return sqlite3.SQLITE_OK if escreve else sqlite3.SQLITE_DENY
+        if acao == sqlite3.SQLITE_PRAGMA:
+            return sqlite3.SQLITE_DENY
+        return sqlite3.SQLITE_OK
+
+    con = sqlite3.connect(str(banco))
+    con.set_authorizer(autorizar)
+    con.row_factory = sqlite3.Row
+    return con
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS arquivos (
     id INTEGER PRIMARY KEY,
@@ -122,9 +162,13 @@ def registrar_auditoria(banco, acao, caminho, data=None, usuario=None):
         con.close()
 
 
-def listar_auditoria(banco, limite=20):
-    """Ultimas acoes: o que foi consultado, quem pediu e quando."""
-    con = _conectar(banco)
+def listar_auditoria(banco, limite=20, perfil=None):
+    """Ultimas acoes: o que foi consultado, quem pediu e quando.
+
+    Com `perfil="ia"` a conexão é restrita (negada a leitura de auditoria),
+    então o chat do papel restrito não enxerga essa tabela.
+    """
+    con = conectar_restrito(banco, perfil) if perfil else _conectar(banco)
     try:
         linhas = con.execute(
             "SELECT acao, caminho, usuario, data FROM auditoria"
@@ -185,8 +229,8 @@ def salvar_movimentos(banco, movimentos):
         con.close()
 
 
-def buscar_por_categoria(banco, categoria):
-    con = _conectar(banco)
+def buscar_por_categoria(banco, categoria, perfil=None):
+    con = conectar_restrito(banco, perfil) if perfil else _conectar(banco)
     try:
         linhas = con.execute(
             "SELECT hash, origem, destino, categoria, origem_decisao, criado_em"
@@ -198,11 +242,11 @@ def buscar_por_categoria(banco, categoria):
         con.close()
 
 
-def buscar_por_nome(banco, termo):
+def buscar_por_nome(banco, termo, perfil=None):
     """Busca destino por trecho do nome (LIKE parametrizado com escape)."""
     limpo = (termo.replace("\\", "\\\\").replace("%", "\\%")
              .replace("_", "\\_"))
-    con = _conectar(banco)
+    con = conectar_restrito(banco, perfil) if perfil else _conectar(banco)
     try:
         linhas = con.execute(
             "SELECT hash, origem, destino, categoria, origem_decisao, criado_em"
@@ -214,8 +258,8 @@ def buscar_por_nome(banco, termo):
         con.close()
 
 
-def buscar_por_hash(banco, resumo):
-    con = _conectar(banco)
+def buscar_por_hash(banco, resumo, perfil=None):
+    con = conectar_restrito(banco, perfil) if perfil else _conectar(banco)
     try:
         linha = con.execute(
             "SELECT hash, origem, destino, categoria, origem_decisao, criado_em"
@@ -227,9 +271,12 @@ def buscar_por_hash(banco, resumo):
         con.close()
 
 
-def historico_do_arquivo(banco, resumo):
-    """Arquivo + classificacoes + auditoria dos seus caminhos. None se desconhecido."""
-    con = _conectar(banco)
+def historico_do_arquivo(banco, resumo, perfil=None):
+    """Arquivo + classificacoes + auditoria dos seus caminhos. None se desconhecido.
+
+    Com `perfil="ia"` a leitura da tabela auditoria é negada (papel restrito).
+    """
+    con = conectar_restrito(banco, perfil) if perfil else _conectar(banco)
     try:
         arquivo = con.execute(
             "SELECT id, hash, origem, destino, categoria, origem_decisao, criado_em"

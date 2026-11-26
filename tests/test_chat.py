@@ -700,3 +700,35 @@ def test_extrair_chamada_tolerante_praticas():
     assert chat.extrair_chamada("use {colchetes} para listas") is None
     assert chat.extrair_chamada('{"tool": 1}') is None
     assert chat.extrair_chamada('{"tool": "x"}') is not None  # sem args vira {}
+
+
+def _sessao_com_banco(tmp_path, perfil):
+    from src import repositorio
+    banco = tmp_path / "b.db"
+    repositorio.iniciar_banco(banco)
+    repositorio.salvar_movimentos(banco, [{
+        "status": "movido", "origem": "entrada/fatura.pdf",
+        "destino": "organizados/Faturas/fatura.pdf", "hash": "a" * 64,
+        "categoria": "Faturas", "data": "2026-11-26T10:00:00+00:00",
+    }])
+    sessao = chat.ChatSession(
+        entrada=tmp_path / "e", organizados=tmp_path / "o",
+        logs=tmp_path / "l", banco=banco, perfil=perfil,
+        confirmar=lambda *a: True)
+    return sessao, banco
+
+
+def test_papel_restrito_ia_nao_ler_auditoria(tmp_path):
+    """Perfil 'ia' nao pode ler a tabela de auditoria (papel restrito)."""
+    sessao, banco = _sessao_com_banco(tmp_path, "ia")
+    r = sessao._t_buscar({"consulta": "a" * 64})
+    assert r["ok"] is False
+    assert "ia" in r["erro"] and ("auditoria" in r["erro"] or "permitida" in r["erro"])
+
+
+def test_papel_admin_ler_auditoria(tmp_path):
+    """Perfil 'admin' pode ler auditoria (equivalente a GRANT)."""
+    sessao, banco = _sessao_com_banco(tmp_path, "admin")
+    r = sessao._t_buscar({"consulta": "a" * 64})
+    assert r["ok"] is True
+    assert isinstance(r["resultado"]["auditoria"], list)

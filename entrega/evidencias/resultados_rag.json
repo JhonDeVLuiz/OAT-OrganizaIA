@@ -42,6 +42,28 @@
     }
   ],
   "prompt_aumentado": "Responda usando SOMENTE os trechos abaixo e cite o hash do arquivo.\nCategorias permitidas: Faturas, Estudos, Trabalho, Pessoal, Outros.\nPergunta: valor da fatura de luz de marco de 2026\n\n[1] arquivo=fatura-luz-2026-03.txt hash=1c50f279910b17f2bcb935736b50bf9f68db44bf69df06f294dba168ac533f30\nDOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nCOMPANHIA DE ENERGIA EXEMPLO S.A.\nFATURA DE ENERGIA ELETRICA - REF. MARCO/2026\n\nInstalacao (exemplo): 000000000-0\nCliente: MARIA SOARES FICTICIA\nCPF/CNPJ: [CPF]\nEndereco: Rua Ficticia das Palmeiras, 120 - Apto 302\nBairro: Jardim Exemplo - Cidade Demo - CEP 00000-000\n\nVencimento: 20/03/2026\nValor total: R$ 184,73\n\nResumo do consumo:\n- Leitura anterior: 04/02/2026   kwh: 1250\n- Leitura atual:    03/03/2026   kwh: 1394\n-\n\n[2] arquivo=checklist-mudanca-apartamento.txt hash=6ebb705ee4b14cd0a26bf6bc89ee2827f09361b3d6429cb376400e110d0cc436\nnto da internet na residência antiga (dia 30)\n\nNo dia:\n[ ] conferir caixa por caixa com lista impressa\n[ ] tirar foto de contadores (água e luz demo)\n[ ] entregar chaves ao sindico exemplo\n\nDepois:\n[ ] trocar endereço no banco demo\n[ ] atualizar cadastro da escola exemplo\n[ ] comprar luminária nova para sala (R$ alocação fake)\n\nTudo ficticio, para treinar categoria Outros/Trabalho.\n\n[3] arquivo=boleto_escola_exemplo.txt hash=14609385a7a217781970ca4c622286c6b3caca6ab56eb436323253bd01d39aaa\nDOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real.\nCOLlegio DEMO Ltda.\nBOLETO DE MENSALIDADE ESCOLAR - MARCO/2026\n\nAluno: PEDRO FICTICIO SOARES    Turma: 6 ano   Matricula: 000000\nResponsavel: MARIA SOARES FICTICIA (CPF [CPF])\nE-mail de contato: [EMAIL]\n\nItem: Mensalidade escolar\nValor: R$ 480,00\nVencimento: 10/03/2026\nDesconto por pontualidade: R$ 24,00 (ate o dia 07)\nValor com desc",
-  "geracao": "blocked",
-  "motivo": "HTTP 401 no gateway de IA em 16/11/2026"
+  "geracao": "local",
+  "resposta": "Com base nos trechos localizados nos arquivos organizados:\n[1] fatura-luz-2026-03.txt (hash 1c50f279910b17f2...): DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real. COMPANHIA DE ENERGIA EXEMPLO S.A. FATURA DE ENERGIA ELETRICA - REF. MARCO/2026 Instalacao (exemplo): 000000000-0 Cliente: MARIA SOARES FICTICIA CPF/CN\n[2] checklist-mudanca-apartamento.txt (hash 6ebb705ee4b14cd0...): nto da internet na residência antiga (dia 30) No dia: [ ] conferir caixa por caixa com lista impressa [ ] tirar foto de contadores (água e luz demo) [ ] entregar chaves ao sindico exemplo Depois: [ ] trocar endereço no b\n[3] boleto_escola_exemplo.txt (hash 14609385a7a21778...): DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real. COLlegio DEMO Ltda. BOLETO DE MENSALIDADE ESCOLAR - MARCO/2026 Aluno: PEDRO FICTICIO SOARES Turma: 6 ano Matricula: 000000 Responsavel: MARIA SOARES F\n[4] carta_banco_exemplo.txt (hash a6cd0e2fac708c26...): DOCUMENTO FICTICIO - gerado para o trabalho, nenhuma relevancia real. BANCO EXEMPLO S.A. Aviso de pendencia (carta inventada, fim didatico) Ref.: Agência 0000-0 - Conta 00000000-0 Cliente: MARIA SOARES FICTICIA - CPF [CP\n[5] fatura-agua-2026-02.txt (hash 56a99bf9382a840a...): R$ 113,20 Vencimento: 15/03/2026 Historico ficticio (m3): 12 - 10 - 13 - 11 - 9 - 11 Media dos ultimos 6 meses: 11,0 m3 Cd de barras (inventado): [CARTAO] 00000000 0 000 Codigo da fatura: DEMO-2026-02-000111 Emissao: 01/\nOs hashes acima (SHA-256) identificam unicamente cada arquivo e servem como fonte da resposta.",
+  "fontes": [
+    {
+      "arquivo": "fatura-luz-2026-03.txt",
+      "hash": "1c50f279910b17f2bcb935736b50bf9f68db44bf69df06f294dba168ac533f30"
+    },
+    {
+      "arquivo": "checklist-mudanca-apartamento.txt",
+      "hash": "6ebb705ee4b14cd0a26bf6bc89ee2827f09361b3d6429cb376400e110d0cc436"
+    },
+    {
+      "arquivo": "boleto_escola_exemplo.txt",
+      "hash": "14609385a7a217781970ca4c622286c6b3caca6ab56eb436323253bd01d39aaa"
+    },
+    {
+      "arquivo": "carta_banco_exemplo.txt",
+      "hash": "a6cd0e2fac708c26099adf61037a41297382c06ccb98dafe238db17ad874fe27"
+    },
+    {
+      "arquivo": "fatura-agua-2026-02.txt",
+      "hash": "56a99bf9382a840aeab83cb9bebef7de022c71e499ab35cf519962037b08a056"
+    }
+  ]
 }
